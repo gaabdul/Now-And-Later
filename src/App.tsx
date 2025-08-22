@@ -85,7 +85,6 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
-  const [showSearchOverlay, setShowSearchOverlay] = useState(false);
   
   // Archive state
   const [archiveSortType, setArchiveSortType] = useState<ArchiveSortType>('date');
@@ -716,7 +715,6 @@ function App() {
       setKeyboardMoveState({ taskId: null, isOpen: false });
       setDeleteConfirmTaskId(null);
       setShowSearchResults(false);
-      setShowSearchOverlay(false);
     }
   };
 
