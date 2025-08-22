@@ -14,6 +14,8 @@ A lightweight single-page application for managing tasks using the Eisenhower Ma
 - **Task Completion**: Mark tasks as complete with a single click
 - **Archive System**: Completed tasks are moved to a dedicated archive view
 - **Restore & Delete**: Restore completed tasks or permanently delete them
+- **Drag & Drop**: Move tasks between quadrants and reorder within quadrants
+- **Keyboard Accessibility**: Full keyboard support for task movement and reordering
 - **Local Persistence**: Boards, active board selection, and all tasks persist in browser storage
 - **Clean UI**: Minimal, responsive design for optimal productivity
 - **Keyboard Support**: Enter to save, Escape to cancel edits
@@ -59,6 +61,20 @@ A lightweight single-page application for managing tasks using the Eisenhower Ma
 - **Validation**: Empty or whitespace-only titles are prevented with error messages
 - **Empty States**: Quadrants show helpful hints when no tasks exist
 
+### Drag & Drop
+- **Move Between Quadrants**: Drag the ⋮⋮ handle to move tasks between quadrants
+- **Reorder Within Quadrant**: Drag tasks up or down within the same quadrant
+- **Visual Feedback**: Quadrants highlight when dragging over them
+- **Drop Indicators**: Blue lines show where the task will be placed
+- **Keyboard Alternative**: Press Enter or Space on a task to open the move menu
+
+### Keyboard Navigation
+- **Move Menu**: Press Enter or Space on any task to open the move menu
+- **Move to Quadrant**: Select from the "Move to" options in the menu
+- **Reorder**: Use "Move Up" or "Move Down" to reorder within the current quadrant
+- **Close Menu**: Press Escape or click "Close" to dismiss the menu
+- **Focus Management**: Focus returns to the moved task after operations
+
 ### Archive
 - **Access Archive**: Click "📁 Archive" in the header to view completed tasks
 - **Archive View**: Shows all completed tasks for the active board, grouped by completion date
@@ -81,7 +97,7 @@ A lightweight single-page application for managing tasks using the Eisenhower Ma
 
 ## Current Status
 
-This is Instruction 3 implementation - task completion and archive functionality. Task movement between quadrants will be added in subsequent instructions.
+This is Instruction 4 implementation - drag-and-drop functionality for task movement and reordering. Delete (Eliminate) functionality and search/filter features will be added in subsequent instructions.
 
 ## Data Structure
 
@@ -103,14 +119,24 @@ interface Task {
   createdAt: number;
   completed: boolean;
   completedAt?: number; // Timestamp when task was completed
+  order: number; // Position within quadrant for ordering
 }
 ```
 
 ## Workflow
 
 1. **Add Tasks**: Create tasks in the appropriate quadrants based on urgency and importance
-2. **Work on Tasks**: Focus on Q1 (Urgent & Important) tasks first
-3. **Complete Tasks**: Click the ✓ button when a task is finished
-4. **Review Archive**: Check completed tasks in the archive view
-5. **Restore if Needed**: Move tasks back to quadrants if they need to be reopened
-6. **Clean Up**: Permanently delete tasks that are no longer relevant
+2. **Prioritize**: Use drag-and-drop to move tasks between quadrants as priorities change
+3. **Reorder**: Arrange tasks within quadrants by dragging or using keyboard controls
+4. **Work on Tasks**: Focus on Q1 (Urgent & Important) tasks first
+5. **Complete Tasks**: Click the ✓ button when a task is finished
+6. **Review Archive**: Check completed tasks in the archive view
+7. **Restore if Needed**: Move tasks back to quadrants if they need to be reopened
+8. **Clean Up**: Permanently delete tasks that are no longer relevant
+
+## Accessibility
+
+- **Keyboard Navigation**: Full keyboard support for all operations
+- **Screen Reader Support**: Proper ARIA labels and semantic HTML
+- **Focus Management**: Logical focus flow and return to moved elements
+- **Visual Feedback**: Clear indicators for drag operations and valid drop targets
