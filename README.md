@@ -16,6 +16,7 @@ A lightweight single-page application for managing tasks using the Eisenhower Ma
 - **Restore & Delete**: Restore completed tasks or permanently delete them
 - **Drag & Drop**: Move tasks between quadrants and reorder within quadrants
 - **Keyboard Accessibility**: Full keyboard support for task movement and reordering
+- **Delete Functionality**: Permanently delete tasks with confirmation dialogs
 - **Local Persistence**: Boards, active board selection, and all tasks persist in browser storage
 - **Clean UI**: Minimal, responsive design for optimal productivity
 - **Keyboard Support**: Enter to save, Escape to cancel edits
@@ -56,10 +57,18 @@ A lightweight single-page application for managing tasks using the Eisenhower Ma
 - **Add Task**: Click "+ Add Task" in any quadrant, type the title, and press Enter
 - **Edit Task**: Click on any task title to edit it inline
 - **Complete Task**: Click the ✓ button next to any task to mark it complete
+- **Delete Task**: Click the 🗑️ button next to any task to delete it permanently
 - **Save Changes**: Press Enter to save, or click outside the input
 - **Cancel Edit**: Press Escape to cancel editing
 - **Validation**: Empty or whitespace-only titles are prevented with error messages
 - **Empty States**: Quadrants show helpful hints when no tasks exist
+
+### Delete Functionality
+- **Delete Active Tasks**: Click the 🗑️ button on any active task to delete it permanently
+- **Confirmation Dialog**: A confirmation dialog appears before deletion
+- **Cancel Delete**: Click "Cancel" to keep the task, or "Delete" to confirm
+- **No Archive**: Deleted tasks do not appear in the archive - they are permanently removed
+- **Escape to Cancel**: Press Escape to dismiss the confirmation dialog
 
 ### Drag & Drop
 - **Move Between Quadrants**: Drag the ⋮⋮ handle to move tasks between quadrants
@@ -79,7 +88,8 @@ A lightweight single-page application for managing tasks using the Eisenhower Ma
 - **Access Archive**: Click "📁 Archive" in the header to view completed tasks
 - **Archive View**: Shows all completed tasks for the active board, grouped by completion date
 - **Restore Task**: Click "↶ Restore" to move a task back to its original quadrant
-- **Delete Task**: Click "🗑️ Delete" to permanently remove a task
+- **Delete Permanently**: Click "🗑️ Delete" to permanently remove a task from archive
+- **Archive Confirmation**: Delete operations in archive also show confirmation dialogs
 - **Back to Matrix**: Click "← Back to Matrix" to return to the main view
 
 ## Technology Stack
@@ -97,7 +107,7 @@ A lightweight single-page application for managing tasks using the Eisenhower Ma
 
 ## Current Status
 
-This is Instruction 4 implementation - drag-and-drop functionality for task movement and reordering. Delete (Eliminate) functionality and search/filter features will be added in subsequent instructions.
+This is Instruction 5 implementation - delete functionality with confirmation dialogs and improved archive restore. Search/filter features will be added in subsequent instructions.
 
 ## Data Structure
 
@@ -130,9 +140,10 @@ interface Task {
 3. **Reorder**: Arrange tasks within quadrants by dragging or using keyboard controls
 4. **Work on Tasks**: Focus on Q1 (Urgent & Important) tasks first
 5. **Complete Tasks**: Click the ✓ button when a task is finished
-6. **Review Archive**: Check completed tasks in the archive view
-7. **Restore if Needed**: Move tasks back to quadrants if they need to be reopened
-8. **Clean Up**: Permanently delete tasks that are no longer relevant
+6. **Delete Unnecessary**: Use the 🗑️ button to permanently remove tasks that are no longer relevant
+7. **Review Archive**: Check completed tasks in the archive view
+8. **Restore if Needed**: Move tasks back to quadrants if they need to be reopened
+9. **Clean Up**: Permanently delete tasks from archive that are no longer needed
 
 ## Accessibility
 
@@ -140,3 +151,4 @@ interface Task {
 - **Screen Reader Support**: Proper ARIA labels and semantic HTML
 - **Focus Management**: Logical focus flow and return to moved elements
 - **Visual Feedback**: Clear indicators for drag operations and valid drop targets
+- **Confirmation Dialogs**: Clear confirmation before destructive actions
