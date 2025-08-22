@@ -14,6 +14,18 @@ interface Task {
   createdAt: number;
   completed: boolean;
   completedAt?: number;
+  order: number; // New field for ordering within quadrant
+}
+
+interface DragState {
+  taskId: string | null;
+  sourceQuadrant: string | null;
+  isDragging: boolean;
+}
+
+interface KeyboardMoveState {
+  taskId: string | null;
+  isOpen: boolean;
 }
 
 function App() {
@@ -24,6 +36,17 @@ function App() {
   const [newTaskInputs, setNewTaskInputs] = useState<{ [key: string]: string }>({});
   const [errorMessages, setErrorMessages] = useState<{ [key: string]: string }>({});
   const [showArchive, setShowArchive] = useState(false);
+  const [dragState, setDragState] = useState<DragState>({
+    taskId: null,
+    sourceQuadrant: null,
+    isDragging: false
+  });
+  const [keyboardMoveState, setKeyboardMoveState] = useState<KeyboardMoveState>({
+    taskId: null,
+    isOpen: false
+  });
+  const [dragOverQuadrant, setDragOverQuadrant] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const quadrants = [
     { id: 'Q1', name: 'Urgent & Important', action: 'Do now' },
@@ -57,7 +80,12 @@ function App() {
     if (savedTasks) {
       try {
         const parsedTasks = JSON.parse(savedTasks);
-        setTasks(parsedTasks);
+        // Ensure all tasks have order field
+        const tasksWithOrder = parsedTasks.map((task: Task, index: number) => ({
+          ...task,
+          order: task.order || index
+        }));
+        setTasks(tasksWithOrder);
       } catch (error) {
         console.warn('Failed to parse saved tasks, starting with empty tasks');
         setTasks([]);
@@ -98,11 +126,13 @@ function App() {
   };
 
   const getTasksForQuadrant = (quadrantId: string) => {
-    return tasks.filter(task => 
-      task.boardId === activeBoardId && 
-      task.quadrantId === quadrantId && 
-      !task.completed
-    );
+    return tasks
+      .filter(task => 
+        task.boardId === activeBoardId && 
+        task.quadrantId === quadrantId && 
+        !task.completed
+      )
+      .sort((a, b) => a.order - b.order);
   };
 
   const getCompletedTasks = () => {
@@ -110,6 +140,11 @@ function App() {
       task.boardId === activeBoardId && 
       task.completed
     ).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+  };
+
+  const getNextOrder = (quadrantId: string) => {
+    const quadrantTasks = getTasksForQuadrant(quadrantId);
+    return quadrantTasks.length > 0 ? Math.max(...quadrantTasks.map(t => t.order)) + 1 : 0;
   };
 
   const addTask = (quadrantId: string) => {
@@ -126,7 +161,8 @@ function App() {
       quadrantId,
       title,
       createdAt: Date.now(),
-      completed: false
+      completed: false,
+      order: getNextOrder(quadrantId)
     };
 
     setTasks([...tasks, newTask]);
@@ -160,17 +196,140 @@ function App() {
   };
 
   const restoreTask = (taskId: string) => {
-    setTasks(tasks.map(task => 
-      task.id === taskId ? { 
-        ...task, 
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    setTasks(tasks.map(t => 
+      t.id === taskId ? { 
+        ...t, 
         completed: false,
-        completedAt: undefined
-      } : task
+        completedAt: undefined,
+        order: getNextOrder(task.quadrantId)
+      } : t
     ));
   };
 
   const deleteTask = (taskId: string) => {
     setTasks(tasks.filter(task => task.id !== taskId));
+  };
+
+  // Drag and Drop Functions
+  const handleDragStart = (e: React.DragEvent, taskId: string, quadrantId: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', taskId);
+    setDragState({
+      taskId,
+      sourceQuadrant: quadrantId,
+      isDragging: true
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent, quadrantId: string, index?: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverQuadrant(quadrantId);
+    setDragOverIndex(index !== undefined ? index : null);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverQuadrant(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetQuadrantId: string, targetIndex?: number) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('text/plain');
+    
+    if (!taskId || !dragState.taskId) return;
+
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const targetQuadrantTasks = getTasksForQuadrant(targetQuadrantId);
+    
+    let newOrder: number;
+    
+    if (targetIndex !== undefined) {
+      // Insert at specific position
+      if (targetIndex >= targetQuadrantTasks.length) {
+        newOrder = getNextOrder(targetQuadrantId);
+      } else {
+        const targetTask = targetQuadrantTasks[targetIndex];
+        newOrder = targetTask.order;
+      }
+    } else {
+      // Add to end
+      newOrder = getNextOrder(targetQuadrantId);
+    }
+
+    // Reorder tasks in target quadrant
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        return { ...t, quadrantId: targetQuadrantId, order: newOrder };
+      }
+      if (t.quadrantId === targetQuadrantId && !t.completed && t.boardId === activeBoardId) {
+        if (targetIndex !== undefined && t.order >= newOrder) {
+          return { ...t, order: t.order + 1 };
+        }
+      }
+      return t;
+    });
+
+    // Reorder tasks in source quadrant
+    const finalTasks = updatedTasks.map(t => {
+      if (t.quadrantId === dragState.sourceQuadrant && !t.completed && t.boardId === activeBoardId) {
+        const sourceTasks = updatedTasks.filter(task => 
+          task.quadrantId === dragState.sourceQuadrant && 
+          !task.completed && 
+          task.boardId === activeBoardId &&
+          task.id !== taskId
+        ).sort((a, b) => a.order - b.order);
+        
+        const sourceIndex = sourceTasks.findIndex(task => task.id === t.id);
+        if (sourceIndex !== -1) {
+          return { ...t, order: sourceIndex };
+        }
+      }
+      return t;
+    });
+
+    setTasks(finalTasks);
+    setDragState({ taskId: null, sourceQuadrant: null, isDragging: false });
+    setDragOverQuadrant(null);
+    setDragOverIndex(null);
+  };
+
+  // Keyboard Move Functions
+  const handleKeyboardMove = (taskId: string, targetQuadrantId: string, direction?: 'up' | 'down') => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (direction) {
+      // Move up/down within same quadrant
+      const quadrantTasks = getTasksForQuadrant(task.quadrantId);
+      const currentIndex = quadrantTasks.findIndex(t => t.id === taskId);
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      
+      if (targetIndex >= 0 && targetIndex < quadrantTasks.length) {
+        const targetTask = quadrantTasks[targetIndex];
+        setTasks(tasks.map(t => {
+          if (t.id === taskId) return { ...t, order: targetTask.order };
+          if (t.id === targetTask.id) return { ...t, order: task.order };
+          return t;
+        }));
+      }
+    } else {
+      // Move to different quadrant
+      const newOrder = getNextOrder(targetQuadrantId);
+      setTasks(tasks.map(t => {
+        if (t.id === taskId) {
+          return { ...t, quadrantId: targetQuadrantId, order: newOrder };
+        }
+        return t;
+      }));
+    }
+    
+    setKeyboardMoveState({ taskId: null, isOpen: false });
   };
 
   const cancelEdit = () => {
@@ -189,6 +348,7 @@ function App() {
     if (event.key === 'Escape') {
       event.preventDefault();
       cancelEdit();
+      setKeyboardMoveState({ taskId: null, isOpen: false });
     }
   };
 
@@ -251,14 +411,21 @@ function App() {
               {quadrants.map(quadrant => {
                 const quadrantTasks = getTasksForQuadrant(quadrant.id);
                 const isAddingTask = newTaskInputs[quadrant.id] !== undefined;
+                const isDragOver = dragOverQuadrant === quadrant.id;
                 
                 return (
-                  <div key={quadrant.id} className={`quadrant ${quadrant.id.toLowerCase().replace(/\s+/g, '-')}`}>
+                  <div 
+                    key={quadrant.id} 
+                    className={`quadrant ${quadrant.id.toLowerCase().replace(/\s+/g, '-')} ${isDragOver ? 'drag-over' : ''}`}
+                    onDragOver={(e) => handleDragOver(e, quadrant.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, quadrant.id)}
+                  >
                     <h2>{quadrant.name}</h2>
                     <p>{quadrant.action}</p>
                     
                     <div className="task-list">
-                      {quadrantTasks.map(task => (
+                      {quadrantTasks.map((task, index) => (
                         <div key={task.id} className="task-item">
                           <div className="task-content">
                             <button 
@@ -268,6 +435,14 @@ function App() {
                             >
                               ✓
                             </button>
+                            <div 
+                              className="task-drag-handle"
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, task.id, quadrant.id)}
+                              title="Drag to move or reorder"
+                            >
+                              ⋮⋮
+                            </div>
                             {editingTaskId === task.id ? (
                               <div className="task-edit">
                                 <input
@@ -291,13 +466,65 @@ function App() {
                                   setEditingTaskId(task.id);
                                   setNewTaskInputs(prev => ({ ...prev, [task.id]: task.title }));
                                 }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    setKeyboardMoveState({ taskId: task.id, isOpen: true });
+                                  }
+                                }}
+                                tabIndex={0}
+                                role="button"
+                                aria-label={`Edit task: ${task.title}`}
                               >
                                 {task.title}
                               </div>
                             )}
                           </div>
+                          
+                          {/* Keyboard Move Menu */}
+                          {keyboardMoveState.taskId === task.id && keyboardMoveState.isOpen && (
+                            <div className="keyboard-move-menu">
+                              <div className="move-section">
+                                <h4>Move to:</h4>
+                                {quadrants.map(q => (
+                                  <button
+                                    key={q.id}
+                                    onClick={() => handleKeyboardMove(task.id, q.id)}
+                                    className={q.id === quadrant.id ? 'current' : ''}
+                                  >
+                                    {q.name}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="move-section">
+                                <h4>Reorder:</h4>
+                                <button onClick={() => handleKeyboardMove(task.id, quadrant.id, 'up')}>
+                                  ↑ Move Up
+                                </button>
+                                <button onClick={() => handleKeyboardMove(task.id, quadrant.id, 'down')}>
+                                  ↓ Move Down
+                                </button>
+                              </div>
+                              <button 
+                                className="close-menu"
+                                onClick={() => setKeyboardMoveState({ taskId: null, isOpen: false })}
+                              >
+                                ✕ Close
+                              </button>
+                            </div>
+                          )}
+                          
+                          {/* Drop indicator */}
+                          {isDragOver && dragOverIndex === index && (
+                            <div className="drop-indicator" />
+                          )}
                         </div>
                       ))}
+                      
+                      {/* Drop indicator at end */}
+                      {isDragOver && dragOverIndex === quadrantTasks.length && (
+                        <div className="drop-indicator" />
+                      )}
                       
                       {isAddingTask ? (
                         <div className="task-edit">
@@ -343,7 +570,7 @@ function App() {
                   </div>
                 );
               })}
-      </div>
+            </div>
           </main>
         </>
       )}

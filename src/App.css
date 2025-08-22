@@ -143,8 +143,14 @@ body {
   align-items: center;
   text-align: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: border-color 0.2s ease;
+  transition: all 0.2s ease;
   overflow: hidden;
+}
+
+.quadrant.drag-over {
+  border-color: #3498db;
+  background-color: #f8f9ff;
+  box-shadow: 0 4px 8px rgba(52, 152, 219, 0.2);
 }
 
 .quadrant h2 {
@@ -174,6 +180,7 @@ body {
 
 .task-item {
   width: 100%;
+  position: relative;
 }
 
 .task-content {
@@ -204,6 +211,28 @@ body {
   color: white;
 }
 
+.task-drag-handle {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: #6c757d;
+  font-size: 0.8rem;
+  user-select: none;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.task-drag-handle:hover {
+  color: #495057;
+}
+
+.task-drag-handle:active {
+  cursor: grabbing;
+}
+
 .task-title {
   flex: 1;
   padding: 0.5rem;
@@ -215,10 +244,16 @@ body {
   text-align: left;
   word-wrap: break-word;
   transition: background-color 0.2s ease;
+  outline: none;
 }
 
 .task-title:hover {
   background-color: #e9ecef;
+}
+
+.task-title:focus {
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 .task-edit {
@@ -256,6 +291,91 @@ body {
   background-color: #e9ecef;
   border-color: #adb5bd;
   color: #495057;
+}
+
+/* Drop indicator */
+.drop-indicator {
+  height: 2px;
+  background-color: #3498db;
+  margin: 0.25rem 0;
+  border-radius: 1px;
+  animation: dropPulse 0.6s ease-in-out;
+}
+
+@keyframes dropPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Keyboard Move Menu */
+.keyboard-move-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: white;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  padding: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.move-section {
+  margin-bottom: 0.75rem;
+}
+
+.move-section:last-of-type {
+  margin-bottom: 0.5rem;
+}
+
+.move-section h4 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.move-section button {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: left;
+  transition: all 0.2s ease;
+  margin-bottom: 0.25rem;
+}
+
+.move-section button:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.move-section button.current {
+  background-color: #e3f2fd;
+  border-color: #2196f3;
+  color: #1976d2;
+}
+
+.close-menu {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.close-menu:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
 }
 
 /* Error messages */
@@ -527,6 +647,12 @@ body {
     font-size: 0.7rem;
   }
   
+  .task-drag-handle {
+    width: 18px;
+    height: 18px;
+    font-size: 0.7rem;
+  }
+  
   .empty-state {
     font-size: 0.8rem;
     padding: 0.5rem;
@@ -546,5 +672,14 @@ body {
   .archive-task-meta {
     flex-direction: column;
     gap: 0.25rem;
+  }
+  
+  .keyboard-move-menu {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 300px;
   }
 }
