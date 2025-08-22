@@ -47,6 +47,7 @@ function App() {
   });
   const [dragOverQuadrant, setDragOverQuadrant] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null);
 
   const quadrants = [
     { id: 'Q1', name: 'Urgent & Important', action: 'Do now' },
@@ -195,6 +196,11 @@ function App() {
     ));
   };
 
+  const deleteTask = (taskId: string) => {
+    setTasks(tasks.filter(task => task.id !== taskId));
+    setDeleteConfirmTaskId(null);
+  };
+
   const restoreTask = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -207,10 +213,6 @@ function App() {
         order: getNextOrder(task.quadrantId)
       } : t
     ));
-  };
-
-  const deleteTask = (taskId: string) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
   };
 
   // Drag and Drop Functions
@@ -349,6 +351,7 @@ function App() {
       event.preventDefault();
       cancelEdit();
       setKeyboardMoveState({ taskId: null, isOpen: false });
+      setDeleteConfirmTaskId(null);
     }
   };
 
@@ -479,7 +482,35 @@ function App() {
                                 {task.title}
                               </div>
                             )}
+                            <button 
+                              className="delete-btn-small"
+                              onClick={() => setDeleteConfirmTaskId(task.id)}
+                              title="Delete task permanently"
+                            >
+                              🗑️
+                            </button>
                           </div>
+                          
+                          {/* Delete Confirmation */}
+                          {deleteConfirmTaskId === task.id && (
+                            <div className="delete-confirmation">
+                              <p>Delete "{task.title}" permanently?</p>
+                              <div className="delete-actions">
+                                <button 
+                                  className="confirm-delete-btn"
+                                  onClick={() => deleteTask(task.id)}
+                                >
+                                  Delete
+                                </button>
+                                <button 
+                                  className="cancel-delete-btn"
+                                  onClick={() => setDeleteConfirmTaskId(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
                           
                           {/* Keyboard Move Menu */}
                           {keyboardMoveState.taskId === task.id && keyboardMoveState.isOpen && (
@@ -611,12 +642,33 @@ function App() {
                         </button>
                         <button 
                           className="delete-btn"
-                          onClick={() => deleteTask(task.id)}
+                          onClick={() => setDeleteConfirmTaskId(task.id)}
                           title="Delete permanently"
                         >
                           🗑️ Delete
                         </button>
                       </div>
+                      
+                      {/* Delete Confirmation for Archive */}
+                      {deleteConfirmTaskId === task.id && (
+                        <div className="delete-confirmation archive-delete">
+                          <p>Delete "{task.title}" permanently from archive?</p>
+                          <div className="delete-actions">
+                            <button 
+                              className="confirm-delete-btn"
+                              onClick={() => deleteTask(task.id)}
+                            >
+                              Delete
+                            </button>
+                            <button 
+                              className="cancel-delete-btn"
+                              onClick={() => setDeleteConfirmTaskId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
