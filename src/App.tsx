@@ -81,7 +81,7 @@ function App() {
   const [showTaskForm, setShowTaskForm] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   
-  // Search state
+  // Search state - Fixed TypeScript build error
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
