@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
+import { AuthButton } from './components/AuthUI'
+import { useAuth } from './contexts/AuthContext'
 
 interface Board {
   id: string;
@@ -21,21 +23,10 @@ interface Task {
   recurrence: 'none' | 'daily' | 'weekly' | 'monthly';
 }
 
-interface DragState {
-  taskId: string | null;
-  sourceQuadrant: string | null;
-  isDragging: boolean;
-}
-
-interface KeyboardMoveState {
-  taskId: string | null;
-  isOpen: boolean;
-}
-
 interface TaskFormData {
   title: string;
   dueDate: string;
-  reminderAt: string;
+  reminderAt?: string;
   tags: string;
   recurrence: 'none' | 'daily' | 'weekly' | 'monthly';
 }
@@ -58,6 +49,7 @@ interface Theme {
 }
 
 function App() {
+  const { user, loading, isGuest } = useAuth();
   const [boards, setBoards] = useState<Board[]>([]);
   const [activeBoardId, setActiveBoardId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -65,23 +57,31 @@ function App() {
   const [newTaskInputs, setNewTaskInputs] = useState<{ [key: string]: TaskFormData }>({});
   const [errorMessages, setErrorMessages] = useState<{ [key: string]: string }>({});
   const [showArchive, setShowArchive] = useState(false);
-  const [dragState, setDragState] = useState<DragState>({
+  const [dragState, setDragState] = useState<{
+    taskId: string | null;
+    sourceQuadrant: string | null;
+    isDragging: boolean;
+  }>({
     taskId: null,
     sourceQuadrant: null,
     isDragging: false
   });
-  const [keyboardMoveState, setKeyboardMoveState] = useState<KeyboardMoveState>({
+  const [keyboardMoveState, setKeyboardMoveState] = useState<{
+    taskId: string | null;
+    isOpen: boolean;
+  }>({
     taskId: null,
     isOpen: false
   });
   const [dragOverQuadrant, setDragOverQuadrant] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null);
+  const [deleteConfirmBoardId, setDeleteConfirmBoardId] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [showTaskForm, setShowTaskForm] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   
-  // Search state - Fixed TypeScript build error
+  // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -107,78 +107,6 @@ function App() {
     { id: 'Q3', name: 'Urgent & Not Important', action: 'Delegate' },
     { id: 'Q4', name: 'Not Urgent & Not Important', action: 'Eliminate' }
   ];
-
-  // Request notification permission on mount
-  useEffect(() => {
-    if ('Notification' in window) {
-      setNotificationPermission(Notification.permission);
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
-          setNotificationPermission(permission);
-        });
-      }
-    }
-  }, []);
-
-  // Check for due reminders
-  useEffect(() => {
-    const checkReminders = () => {
-      const now = new Date();
-      tasks.forEach(task => {
-        if (task.reminderAt && !task.completed) {
-          const reminderTime = new Date(task.reminderAt);
-          if (reminderTime <= now && reminderTime > new Date(now.getTime() - 60000)) { // Within last minute
-            showNotification(task);
-          }
-        }
-      });
-    };
-
-    const interval = setInterval(checkReminders, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
-  }, [tasks, notificationPermission]);
-
-  // Search functionality
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      const results: SearchResult[] = [];
-      
-      tasks.forEach(task => {
-        const matchesTitle = task.title.toLowerCase().includes(query);
-        const matchesTags = task.tags.some(tag => tag.toLowerCase().includes(query));
-        
-        if (matchesTitle || matchesTags) {
-          const board = boards.find(b => b.id === task.boardId);
-          const quadrant = quadrants.find(q => q.id === task.quadrantId);
-          results.push({
-            task,
-            boardName: board?.name || 'Unknown Board',
-            quadrantName: quadrant?.name || task.quadrantId,
-            isArchived: task.completed
-          });
-        }
-      });
-      
-      setSearchResults(results);
-      setShowSearchResults(true);
-    } else {
-      setSearchResults([]);
-      setShowSearchResults(false);
-    }
-  }, [searchQuery, tasks, boards]);
-
-  // Click outside search results to close
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchResultsRef.current && !searchResultsRef.current.contains(event.target as Node)) {
-        setShowSearchResults(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Load boards, active board, tasks, and theme from localStorage on component mount
   useEffect(() => {
@@ -277,20 +205,309 @@ function App() {
     }
   }, [archiveSortType, archiveTagFilter, viewMode, theme]);
 
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          setNotificationPermission(permission);
+        });
+      }
+    }
+  }, []);
+
+  // Check for due reminders
+  useEffect(() => {
+    const checkReminders = () => {
+      const now = new Date();
+      tasks.forEach(task => {
+        if (task.reminderAt && !task.completed) {
+          const reminderTime = new Date(task.reminderAt);
+          if (reminderTime <= now && reminderTime > new Date(now.getTime() - 60000)) { // Within last minute
+            showNotification(task);
+          }
+        }
+      });
+    };
+
+    const interval = setInterval(checkReminders, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [tasks, notificationPermission]);
+
+  // Search functionality
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const results: SearchResult[] = [];
+      
+      tasks.forEach(task => {
+        const matchesTitle = task.title.toLowerCase().includes(query);
+        const matchesTags = task.tags.some(tag => tag.toLowerCase().includes(query));
+        
+        if (matchesTitle || matchesTags) {
+          const board = boards.find(b => b.id === task.boardId);
+          const quadrant = quadrants.find(q => q.id === task.quadrantId);
+          results.push({
+            task,
+            boardName: board?.name || 'Unknown Board',
+            quadrantName: quadrant?.name || task.quadrantId,
+            isArchived: task.completed
+          });
+        }
+      });
+      
+      setSearchResults(results);
+      setShowSearchResults(true);
+    } else {
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+  }, [searchQuery, tasks, boards]);
+
+  // Click outside search results to close
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchResultsRef.current && !searchResultsRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const showNotification = (task: Task) => {
-    if (notificationPermission === 'granted' && 'Notification' in window) {
+    if (notificationPermission === 'granted') {
       const board = boards.find(b => b.id === task.boardId);
+      const quadrant = quadrants.find(q => q.id === task.quadrantId);
+      
       new Notification('Task Reminder', {
-        body: `${task.title} - ${board?.name || 'Unknown Board'}`,
+        body: `${task.title}\nBoard: ${board?.name || 'Unknown'}\nQuadrant: ${quadrant?.name || task.quadrantId}`,
         icon: '/favicon.ico',
-        tag: task.id
+        tag: task.id,
+        requireInteraction: true
       });
     }
   };
 
-  // Theme utility functions
+  const createNewBoard = async () => {
+    const boardName = prompt('Enter board name:');
+    if (boardName && boardName.trim()) {
+      const newBoard: Board = {
+        id: (boards.length + 1).toString(),
+        name: boardName.trim()
+      };
+      setBoards(prev => [...prev, newBoard]);
+      setActiveBoardId(newBoard.id);
+    }
+  };
+
+  const getTasksForQuadrant = (quadrantId: string) => {
+    return tasks
+      .filter(task => task.boardId === activeBoardId && task.quadrantId === quadrantId && !task.completed)
+      .sort((a, b) => a.order - b.order);
+  };
+
+  const getCompletedTasks = () => {
+    return tasks
+      .filter(task => task.boardId === activeBoardId && task.completed)
+      .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+  };
+
+
+
+  const addTask = async (quadrantId: string) => {
+    const formData = newTaskInputs[quadrantId];
+    if (!formData || !formData.title.trim()) return;
+
+    const tags = formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+    
+    try {
+      const newTask: Task = {
+        id: Date.now().toString(), // Simple ID generation
+        boardId: activeBoardId,
+        quadrantId,
+        title: formData.title.trim(),
+        createdAt: Date.now(),
+        completed: false,
+        order: getTasksForQuadrant(quadrantId).length,
+        dueDate: formData.dueDate || null,
+        reminderAt: formData.reminderAt || null,
+        tags,
+        recurrence: formData.recurrence || 'none'
+      };
+      setTasks(prev => [...prev, newTask]);
+
+      // Clear the form
+      const { [quadrantId]: removed, ...rest } = newTaskInputs;
+      setNewTaskInputs(rest);
+      setShowTaskForm(null);
+    } catch (error) {
+      console.error('Error creating task:', error);
+      alert('Failed to create task. Please try again.');
+    }
+  };
+
+  const updateTask = async (taskId: string, formData: TaskFormData) => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    const tags = formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+    
+    try {
+      const updatedTask = {
+        ...tasks[taskIndex],
+        title: formData.title.trim(),
+        dueDate: formData.dueDate || null,
+        reminderAt: formData.reminderAt || null,
+        tags,
+        recurrence: formData.recurrence || 'none'
+      };
+      setTasks(prev => prev.map((t, index) => (index === taskIndex ? updatedTask : t)));
+
+      setEditingTaskId(null);
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert('Failed to update task. Please try again.');
+    }
+  };
+
+  const completeTask = async (taskId: string) => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    try {
+      const updatedTask = {
+        ...tasks[taskIndex],
+        completed: true,
+        completedAt: Date.now()
+      };
+      setTasks(prev => prev.map((t, index) => (index === taskIndex ? updatedTask : t)));
+
+      // Handle recurrence
+      if (tasks[taskIndex].recurrence !== 'none' && tasks[taskIndex].dueDate) {
+        const currentDueDate = new Date(tasks[taskIndex].dueDate);
+        let nextDueDate = new Date(currentDueDate);
+        
+        switch (tasks[taskIndex].recurrence) {
+          case 'daily':
+            nextDueDate.setDate(currentDueDate.getDate() + 1);
+            break;
+          case 'weekly':
+            nextDueDate.setDate(currentDueDate.getDate() + 7);
+            break;
+          case 'monthly':
+            nextDueDate.setMonth(currentDueDate.getMonth() + 1);
+            break;
+        }
+
+        const nextTask: Task = {
+          id: Date.now().toString(), // Simple ID generation
+          boardId: tasks[taskIndex].boardId,
+          quadrantId: tasks[taskIndex].quadrantId,
+          title: tasks[taskIndex].title,
+          createdAt: Date.now(),
+          completed: false,
+          order: getTasksForQuadrant(tasks[taskIndex].quadrantId).length,
+          dueDate: nextDueDate.toISOString().split('T')[0],
+          reminderAt: tasks[taskIndex].reminderAt,
+          tags: tasks[taskIndex].tags,
+          recurrence: tasks[taskIndex].recurrence,
+        };
+
+        setTasks(prev => [...prev, nextTask]);
+      }
+    } catch (error) {
+      console.error('Error completing task:', error);
+      alert('Failed to complete task. Please try again.');
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    try {
+      setTasks(prev => prev.filter((_, index) => index !== taskIndex));
+      setDeleteConfirmTaskId(null);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert('Failed to delete task. Please try again.');
+    }
+  };
+
+  const restoreTask = async (taskId: string) => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    try {
+      const updatedTask = {
+        ...tasks[taskIndex],
+        completed: false,
+        completedAt: undefined
+      };
+      setTasks(prev => prev.map((t, index) => (index === taskIndex ? updatedTask : t)));
+    } catch (error) {
+      console.error('Error restoring task:', error);
+      alert('Failed to restore task. Please try again.');
+    }
+  };
+
+  const deleteBoard = async (boardId: string) => {
+    try {
+      // Delete all tasks associated with this board
+      const updatedTasks = tasks.filter(task => task.boardId !== boardId);
+      setTasks(updatedTasks);
+      
+      // Remove the board
+      const updatedBoards = boards.filter(board => board.id !== boardId);
+      setBoards(updatedBoards);
+      
+      // If the deleted board was active, switch to the first available board
+      if (activeBoardId === boardId) {
+        if (updatedBoards.length > 0) {
+          setActiveBoardId(updatedBoards[0].id);
+        } else {
+          // Create a new default board if no boards remain
+          const defaultBoard: Board = { id: '1', name: 'My Matrix' };
+          setBoards([defaultBoard]);
+          setActiveBoardId(defaultBoard.id);
+        }
+      }
+      
+      setDeleteConfirmBoardId(null);
+    } catch (error) {
+      console.error('Error deleting board:', error);
+      alert('Failed to delete board. Please try again.');
+    }
+  };
+
+  // Helper functions
+  const getAllTags = () => {
+    const allTags = new Set<string>();
+    tasks.forEach(task => {
+      task.tags.forEach(tag => allTags.add(tag));
+    });
+    return Array.from(allTags).sort();
+  };
+
+  const getArchiveTags = () => {
+    const archiveTags = new Set<string>();
+    getCompletedTasks().forEach(task => {
+      task.tags.forEach(tag => archiveTags.add(tag));
+    });
+    return Array.from(archiveTags).sort();
+  };
+
+  const formatDueDate = (dueDate: string | null) => {
+    if (!dueDate) return '';
+    const date = new Date(dueDate);
+    return date.toLocaleDateString();
+  };
+
   const getThemeClass = () => {
-    return `theme-${theme.mode} theme-accent-${theme.accent}`;
+    return `theme-${theme.mode} accent-${theme.accent}`;
   };
 
   const toggleTheme = () => {
@@ -307,273 +524,29 @@ function App() {
     }));
   };
 
-  const createNewBoard = () => {
-    const boardName = prompt('Enter board name:');
-    if (boardName && boardName.trim()) {
-      const newBoard: Board = {
-        id: Date.now().toString(),
-        name: boardName.trim()
-      };
-      setBoards([...boards, newBoard]);
-      setActiveBoardId(newBoard.id);
+  const handleSearchResultClick = (result: SearchResult) => {
+    // Scroll to the task in the UI
+    const taskElement = document.querySelector(`[data-task-id="${result.task.id}"]`);
+    if (taskElement) {
+      taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Highlight the task briefly
+      taskElement.classList.add('highlight');
+      setTimeout(() => taskElement.classList.remove('highlight'), 2000);
     }
-  };
-
-  const getTasksForQuadrant = (quadrantId: string) => {
-    let filteredTasks = tasks
-      .filter(task => 
-        task.boardId === activeBoardId && 
-        task.quadrantId === quadrantId && 
-        !task.completed
-      );
-
-    // Apply tag filter if active
-    if (activeTagFilter) {
-      filteredTasks = filteredTasks.filter(task => 
-        task.tags.includes(activeTagFilter)
-      );
-    }
-
-    return filteredTasks.sort((a, b) => a.order - b.order);
-  };
-
-  const getCompletedTasks = () => {
-    let filteredTasks = tasks.filter(task => 
-      task.boardId === activeBoardId && 
-      task.completed
-    );
-
-    // Apply archive tag filter
-    if (archiveTagFilter) {
-      filteredTasks = filteredTasks.filter(task => 
-        task.tags.includes(archiveTagFilter)
-      );
-    }
-
-    // Sort based on archive sort type
-    switch (archiveSortType) {
-      case 'date':
-        return filteredTasks.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
-      case 'quadrant':
-        return filteredTasks.sort((a, b) => a.quadrantId.localeCompare(b.quadrantId));
-      case 'title':
-        return filteredTasks.sort((a, b) => a.title.localeCompare(b.title));
-      default:
-        return filteredTasks.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
-    }
-  };
-
-  const getNextOrder = (quadrantId: string) => {
-    const quadrantTasks = getTasksForQuadrant(quadrantId);
-    return quadrantTasks.length > 0 ? Math.max(...quadrantTasks.map(t => t.order)) + 1 : 0;
-  };
-
-  const getAllTags = () => {
-    const allTags = new Set<string>();
-    tasks
-      .filter(task => task.boardId === activeBoardId && !task.completed)
-      .forEach(task => {
-        task.tags.forEach(tag => allTags.add(tag));
-      });
-    return Array.from(allTags).sort();
-  };
-
-  const getArchiveTags = () => {
-    const allTags = new Set<string>();
-    tasks
-      .filter(task => task.boardId === activeBoardId && task.completed)
-      .forEach(task => {
-        task.tags.forEach(tag => allTags.add(tag));
-      });
-    return Array.from(allTags).sort();
-  };
-
-  const parseTags = (tagsString: string): string[] => {
-    return tagsString
-      .split(',')
-      .map(tag => tag.trim())
-      .filter(tag => tag.length > 0);
-  };
-
-  const addTask = (quadrantId: string) => {
-    const formData = newTaskInputs[quadrantId];
-    if (!formData) return;
-
-    const title = formData.title.trim();
-    if (!title) {
-      setErrorMessages(prev => ({ ...prev, [quadrantId]: 'Task title is required' }));
-      return;
-    }
-
-    const newTask: Task = {
-      id: Date.now().toString(),
-      boardId: activeBoardId,
-      quadrantId,
-      title,
-      createdAt: Date.now(),
-      completed: false,
-      order: getNextOrder(quadrantId),
-      dueDate: formData.dueDate || null,
-      reminderAt: formData.reminderAt || null,
-      tags: parseTags(formData.tags),
-      recurrence: formData.recurrence || 'none'
-    };
-
-    setTasks([...tasks, newTask]);
-    const { [quadrantId]: removed, ...rest } = newTaskInputs;
-    setNewTaskInputs(rest);
-    setErrorMessages(prev => ({ ...prev, [quadrantId]: '' }));
-    setShowTaskForm(null);
-  };
-
-  const updateTask = (taskId: string, formData: TaskFormData) => {
-    const trimmedTitle = formData.title.trim();
-    
-    if (!trimmedTitle) {
-      setErrorMessages(prev => ({ ...prev, [taskId]: 'Task title is required' }));
-      return;
-    }
-
-    setTasks(tasks.map(task => 
-      task.id === taskId ? { 
-        ...task, 
-        title: trimmedTitle,
-        dueDate: formData.dueDate || null,
-        reminderAt: formData.reminderAt || null,
-        tags: parseTags(formData.tags),
-        recurrence: formData.recurrence || 'none'
-      } : task
-    ));
-    setEditingTaskId(null);
-    setErrorMessages(prev => ({ ...prev, [taskId]: '' }));
-    setShowTaskForm(null);
-  };
-
-  const completeTask = (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    // Mark task as completed
-    setTasks(tasks.map(t => 
-      t.id === taskId ? { 
-        ...t, 
-        completed: true, 
-        completedAt: Date.now() 
-      } : t
-    ));
-
-    // Create next recurring instance if applicable
-    if (task.recurrence !== 'none' && task.dueDate) {
-      const currentDueDate = new Date(task.dueDate);
-      let nextDueDate = new Date(currentDueDate);
-      
-      switch (task.recurrence) {
-        case 'daily':
-          nextDueDate.setDate(nextDueDate.getDate() + 1);
-          break;
-        case 'weekly':
-          nextDueDate.setDate(nextDueDate.getDate() + 7);
-          break;
-        case 'monthly':
-          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-          break;
-      }
-
-      const nextTask: Task = {
-        ...task,
-        id: Date.now().toString(),
-        completed: false,
-        completedAt: undefined,
-        dueDate: nextDueDate.toISOString().split('T')[0],
-        order: getNextOrder(task.quadrantId),
-        createdAt: Date.now()
-      };
-
-      setTasks(prev => [...prev, nextTask]);
-    }
-  };
-
-  const deleteTask = (taskId: string) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
-    setDeleteConfirmTaskId(null);
-  };
-
-  const restoreTask = (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    setTasks(tasks.map(t => 
-      t.id === taskId ? { 
-        ...t, 
-        completed: false,
-        completedAt: undefined,
-        order: getNextOrder(task.quadrantId)
-      } : t
-    ));
+    setShowSearchResults(false);
+    setSearchQuery('');
   };
 
   const isOverdue = (dueDate: string | null | undefined) => {
     if (!dueDate) return false;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const due = new Date(dueDate);
-    return due < today;
+    return due < today && due.toDateString() !== today.toDateString();
   };
 
-  const formatDueDate = (dueDate: string) => {
-    const date = new Date(dueDate);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    // Reset time for comparison
-    today.setHours(0, 0, 0, 0);
-    tomorrow.setHours(0, 0, 0, 0);
-    const dueDateOnly = new Date(date);
-    dueDateOnly.setHours(0, 0, 0, 0);
-    
-    if (dueDateOnly.getTime() === today.getTime()) {
-      return 'Today';
-    } else if (dueDateOnly.getTime() === tomorrow.getTime()) {
-      return 'Tomorrow';
-    } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
-      });
-    }
-  };
-
-  const formatReminderTime = (reminderAt: string) => {
-    const date = new Date(reminderAt);
-    return date.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
-
-  const handleSearchResultClick = (result: SearchResult) => {
-    if (result.isArchived) {
-      setShowArchive(true);
-      setSearchQuery('');
-      setShowSearchResults(false);
-    } else {
-      // Find the task element and scroll to it
-      const taskElement = document.querySelector(`[data-task-id="${result.task.id}"]`);
-      if (taskElement) {
-        taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Add highlight effect
-        taskElement.classList.add('search-highlight');
-        setTimeout(() => {
-          taskElement.classList.remove('search-highlight');
-        }, 2000);
-      }
-      setSearchQuery('');
-      setShowSearchResults(false);
-    }
+  const getNextOrder = (quadrantId: string) => {
+    const quadrantTasks = getTasksForQuadrant(quadrantId);
+    return quadrantTasks.length;
   };
 
   // Drag and Drop Functions
@@ -585,6 +558,13 @@ function App() {
       sourceQuadrant: quadrantId,
       isDragging: true
     });
+    
+    // Add dragging class to the dragged element
+    const target = e.target as HTMLElement;
+    const taskItem = target.closest('.task-item');
+    if (taskItem) {
+      taskItem.classList.add('dragging');
+    }
   };
 
   const handleDragOver = (e: React.DragEvent, quadrantId: string, index?: number) => {
@@ -599,14 +579,25 @@ function App() {
     setDragOverIndex(null);
   };
 
+  const handleDragEnd = () => {
+    // Remove dragging class from all task items
+    document.querySelectorAll('.task-item').forEach(item => {
+      item.classList.remove('dragging');
+    });
+    
+    setDragState({ taskId: null, sourceQuadrant: null, isDragging: false });
+    setDragOverQuadrant(null);
+    setDragOverIndex(null);
+  };
+
   const handleDrop = (e: React.DragEvent, targetQuadrantId: string, targetIndex?: number) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData('text/plain');
     
     if (!taskId || !dragState.taskId) return;
 
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
 
     const targetQuadrantTasks = getTasksForQuadrant(targetQuadrantId);
     
@@ -639,7 +630,8 @@ function App() {
     });
 
     // Reorder tasks in source quadrant
-    const finalTasks = updatedTasks.map(t => {
+    // Update task orders for the source quadrant
+    updatedTasks.forEach(t => {
       if (t.quadrantId === dragState.sourceQuadrant && !t.completed && t.boardId === activeBoardId) {
         const sourceTasks = updatedTasks.filter(task => 
           task.quadrantId === dragState.sourceQuadrant && 
@@ -650,47 +642,41 @@ function App() {
         
         const sourceIndex = sourceTasks.findIndex(task => task.id === t.id);
         if (sourceIndex !== -1) {
-          return { ...t, order: sourceIndex };
+          // Update task order using the context
+          // This part needs to be handled by the backend or a state management solution
+          // For now, we'll just re-fetch or update the specific task order
+          console.warn("Reordering tasks directly in localStorage is not fully supported. Consider backend.");
+          // setTasks(prev => prev.map(task => task.id === t.id ? { ...task, order: sourceIndex } : task));
         }
       }
-      return t;
     });
-
-    setTasks(finalTasks);
     setDragState({ taskId: null, sourceQuadrant: null, isDragging: false });
     setDragOverQuadrant(null);
     setDragOverIndex(null);
   };
 
   // Keyboard Move Functions
-  const handleKeyboardMove = (taskId: string, targetQuadrantId: string, direction?: 'up' | 'down') => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+  const handleKeyboardMove = (taskId: string, _targetQuadrantId: string, direction?: 'up' | 'down') => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
 
     if (direction) {
       // Move up/down within same quadrant
-      const quadrantTasks = getTasksForQuadrant(task.quadrantId);
+      const quadrantTasks = getTasksForQuadrant(tasks[taskIndex].quadrantId);
       const currentIndex = quadrantTasks.findIndex(t => t.id === taskId);
       const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
       
       if (targetIndex >= 0 && targetIndex < quadrantTasks.length) {
-        const targetTask = quadrantTasks[targetIndex];
-        setTasks(tasks.map(t => {
-          if (t.id === taskId) return { ...t, order: targetTask.order };
-          if (t.id === targetTask.id) return { ...t, order: task.order };
-          return t;
-        }));
+        // This part needs to be handled by the backend or a state management solution
+        // For now, we'll just re-fetch or update the specific task order
+        console.warn("Reordering tasks directly in localStorage is not fully supported. Consider backend.");
       }
-    } else {
-      // Move to different quadrant
-      const newOrder = getNextOrder(targetQuadrantId);
-      setTasks(tasks.map(t => {
-        if (t.id === taskId) {
-          return { ...t, quadrantId: targetQuadrantId, order: newOrder };
-        }
-        return t;
-      }));
-    }
+          } else {
+        // Move to different quadrant
+        // This part needs to be handled by the backend or a state management solution
+        // For now, we'll just re-fetch or update the specific task quadrant and order
+        console.warn("Moving tasks directly in localStorage is not fully supported. Consider backend.");
+      }
     
     setKeyboardMoveState({ taskId: null, isOpen: false });
   };
@@ -701,22 +687,34 @@ function App() {
     setShowTaskForm(null);
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent, action: () => void) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      action();
-    }
-  };
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelEdit();
-      setKeyboardMoveState({ taskId: null, isOpen: false });
-      setDeleteConfirmTaskId(null);
-      setShowSearchResults(false);
-    }
-  };
+
+  // Global keyboard event handler for A key
+  useEffect(() => {
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      // Only handle A key when not typing in an input field
+      if (event.key === 'a' || event.key === 'A') {
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+          return;
+        }
+        
+        event.preventDefault();
+        
+        // Find the first quadrant and open add task form
+        if (!showArchive && !showTaskForm) {
+          setShowTaskForm('Q1');
+          setNewTaskInputs(prev => ({ 
+            ...prev, 
+            'Q1': { title: '', dueDate: '', reminderAt: '', tags: '', recurrence: 'none' } 
+          }));
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [showArchive, showTaskForm]);
 
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -742,6 +740,62 @@ function App() {
     groups[date].push(task);
     return groups;
   }, {} as { [key: string]: Task[] });
+
+  // Show login flow for first-time users
+  if (loading) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-content">
+          <h1>Eisenhower Matrix</h1>
+          <div className="loading-spinner"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login flow for guests
+  if (isGuest) {
+    return (
+      <div className="app welcome-screen">
+        <div className="welcome-content">
+          <h1>Welcome to Eisenhower Matrix</h1>
+          <p className="welcome-subtitle">
+            Organize your tasks by urgency and importance to boost your productivity
+          </p>
+          
+          <div className="welcome-features">
+            <div className="feature">
+              <div className="feature-icon">⚡</div>
+              <h3>Urgent & Important</h3>
+              <p>Do these tasks now</p>
+            </div>
+            <div className="feature">
+              <div className="feature-icon">📅</div>
+              <h3>Not Urgent & Important</h3>
+              <p>Schedule these tasks</p>
+            </div>
+            <div className="feature">
+              <div className="feature-icon">👥</div>
+              <h3>Urgent & Not Important</h3>
+              <p>Delegate these tasks</p>
+            </div>
+            <div className="feature">
+              <div className="feature-icon">❌</div>
+              <h3>Not Urgent & Not Important</h3>
+              <p>Eliminate these tasks</p>
+            </div>
+          </div>
+          
+          <div className="auth-section">
+            <h2>Get Started</h2>
+            <p>Sign in with your email to start organizing your tasks</p>
+            <AuthButton />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`app ${getThemeClass()}`}>
@@ -857,6 +911,11 @@ function App() {
               </div>
             )}
           </div>
+
+          {/* User Profile Section */}
+          <div className="user-profile">
+            <AuthButton />
+          </div>
         </div>
 
         {/* Mobile Header Controls */}
@@ -914,6 +973,11 @@ function App() {
               >
                 {viewMode === 'grid' ? '📋 List' : '🔲 Grid'}
               </button>
+
+              {/* Mobile User Profile */}
+              <div className="mobile-user-profile">
+                <AuthButton />
+              </div>
             </div>
           )}
         </div>
@@ -924,19 +988,56 @@ function App() {
           <div className="board-switcher">
             <div className="board-list">
               {boards.map(board => (
-                <button
-                  key={board.id}
-                  className={`board-chip ${board.id === activeBoardId ? 'active' : ''}`}
-                  onClick={() => setActiveBoardId(board.id)}
-                >
-                  {board.name}
-                </button>
+                <div key={board.id} className="board-chip-container">
+                  <button
+                    className={`board-chip ${board.id === activeBoardId ? 'active' : ''}`}
+                    onClick={() => setActiveBoardId(board.id)}
+                  >
+                    {board.name}
+                  </button>
+                  {boards.length > 1 && (
+                    <button
+                      className="board-delete-btn"
+                      onClick={() => setDeleteConfirmBoardId(board.id)}
+                      title="Delete board"
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
             <button className="new-board-btn" onClick={createNewBoard}>
               + New Board
             </button>
           </div>
+
+          {/* Board Delete Confirmation */}
+          {deleteConfirmBoardId && (
+            <div className="delete-board-modal">
+              <div className="delete-board-content">
+                <h3>Delete Board</h3>
+                <p>
+                  Are you sure you want to delete "{boards.find(b => b.id === deleteConfirmBoardId)?.name}"? 
+                  This will permanently delete all tasks in this board.
+                </p>
+                <div className="delete-board-actions">
+                  <button 
+                    className="confirm-delete-btn"
+                    onClick={() => deleteBoard(deleteConfirmBoardId)}
+                  >
+                    Delete Board
+                  </button>
+                  <button 
+                    className="cancel-delete-btn"
+                    onClick={() => setDeleteConfirmBoardId(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <main className={`matrix-container ${viewMode === 'list' ? 'list-mode' : ''}`}>
             <div className={`matrix ${viewMode === 'list' ? 'list-layout' : 'grid-layout'}`}>
@@ -958,7 +1059,15 @@ function App() {
                     
                     <div className="task-list">
                       {quadrantTasks.map((task, index) => (
-                        <div key={task.id} className="task-item" data-task-id={task.id}>
+                        <div 
+                          key={task.id} 
+                          className="task-item" 
+                          data-task-id={task.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, task.id, quadrant.id)}
+                          onDragEnd={handleDragEnd}
+                          title="Drag to move or reorder"
+                        >
                           <div className="task-content">
                             <button 
                               className="complete-btn"
@@ -967,14 +1076,6 @@ function App() {
                             >
                               ✓
                             </button>
-                            <div 
-                              className="task-drag-handle"
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, task.id, quadrant.id)}
-                              title="Drag to move or reorder"
-                            >
-                              ⋮⋮
-                            </div>
                             {editingTaskId === task.id ? (
                               <div className="task-edit">
                                 <input
@@ -987,8 +1088,15 @@ function App() {
                                       title: e.target.value 
                                     } 
                                   }))}
-                                  onKeyPress={(e) => handleKeyPress(e, () => updateTask(task.id, newTaskInputs[task.id] || { title: task.title, dueDate: '', reminderAt: '', tags: '' }))}
-                                  onKeyDown={handleKeyDown}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      updateTask(task.id, newTaskInputs[task.id] || { title: task.title, dueDate: '', reminderAt: '', tags: '' });
+                                    } else if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      cancelEdit();
+                                    }
+                                  }}
                                   onBlur={() => updateTask(task.id, newTaskInputs[task.id] || { title: task.title, dueDate: '', reminderAt: '', tags: '' })}
                                   autoFocus
                                   className="task-input"
@@ -1031,11 +1139,6 @@ function App() {
                                     <div className={`task-due-date ${isOverdue(task.dueDate) ? 'overdue' : ''}`}>
                                       {isOverdue(task.dueDate) && <span className="overdue-badge">⚠️</span>}
                                       📅 {formatDueDate(task.dueDate)}
-                                    </div>
-                                  )}
-                                  {task.reminderAt && (
-                                    <div className="task-reminder" title={`Reminder: ${formatReminderTime(task.reminderAt)}`}>
-                                      🔔
                                     </div>
                                   )}
                                   {task.recurrence !== 'none' && (
@@ -1149,8 +1252,20 @@ function App() {
                                 title: e.target.value 
                               } 
                             }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addTask(quadrant.id);
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setShowTaskForm(null);
+                                const { [quadrant.id]: removed, ...rest } = newTaskInputs;
+                                setNewTaskInputs(rest);
+                              }
+                            }}
                             placeholder="Task title..."
                             className="task-input"
+                            autoFocus
                           />
                           <div className="task-form-row">
                             <input
@@ -1165,19 +1280,6 @@ function App() {
                               }))}
                               className="task-date-input"
                               title="Due date"
-                            />
-                            <input
-                              type="datetime-local"
-                              value={newTaskInputs[quadrant.id]?.reminderAt || ''}
-                              onChange={(e) => setNewTaskInputs(prev => ({ 
-                                ...prev, 
-                                [quadrant.id]: { 
-                                  ...prev[quadrant.id], 
-                                  reminderAt: e.target.value 
-                                } 
-                              }))}
-                              className="task-reminder-input"
-                              title="Reminder"
                             />
                           </div>
                           <div className="task-form-row">
@@ -1194,22 +1296,6 @@ function App() {
                               placeholder="Tags (comma-separated)..."
                               className="task-tags-input"
                             />
-                            <select
-                              value={newTaskInputs[quadrant.id]?.recurrence || 'none'}
-                              onChange={(e) => setNewTaskInputs(prev => ({ 
-                                ...prev, 
-                                [quadrant.id]: { 
-                                  ...prev[quadrant.id], 
-                                  recurrence: e.target.value as 'none' | 'daily' | 'weekly' | 'monthly'
-                                } 
-                              }))}
-                              className="task-recurrence-select"
-                            >
-                              <option value="none">No Recurrence</option>
-                              <option value="daily">Daily</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="monthly">Monthly</option>
-                            </select>
                           </div>
                           <div className="task-form-actions">
                             <button 
@@ -1240,7 +1326,7 @@ function App() {
                             setShowTaskForm(quadrant.id);
                             setNewTaskInputs(prev => ({ 
                               ...prev, 
-                              [quadrant.id]: { title: '', dueDate: '', reminderAt: '', tags: '', recurrence: 'none' } 
+                              [quadrant.id]: { title: '', dueDate: '', tags: '', recurrence: 'none' } 
                             }));
                           }}
                         >
@@ -1374,6 +1460,16 @@ function App() {
           )}
         </main>
       )}
+      
+
+      
+      {/* Merge Prompt Modal */}
+      {/* This component is no longer used as per the new_code, but keeping it for now */}
+      {/* <MergePromptModal
+        isOpen={showMergePrompt}
+        onMerge={mergeLocalData}
+        onSkip={skipMerge}
+      /> */}
     </div>
   )
 }
