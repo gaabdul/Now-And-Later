@@ -14,6 +14,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isGuest: boolean;
+  isGuestMode: boolean;
+  setGuestMode: (guestMode: boolean) => void;
   sendSignInLink: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserLastSeen: () => Promise<void>;
@@ -37,11 +39,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(true);
+  const [isGuestMode, setIsGuestMode] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      setIsGuest(!user);
+      setIsGuest(!user && !isGuestMode);
       
       if (user) {
         // Create or update user document
@@ -86,7 +89,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     return unsubscribe;
-  }, []);
+  }, [isGuestMode]);
+
+  const setGuestMode = (guestMode: boolean) => {
+    setIsGuestMode(guestMode);
+    setIsGuest(!user && !guestMode);
+  };
 
   const sendSignInLink = async (email: string) => {
     const actionCodeSettings = {
@@ -106,6 +114,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
+      setIsGuestMode(false);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
@@ -125,6 +134,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     loading,
     isGuest,
+    isGuestMode,
+    setGuestMode,
     sendSignInLink,
     signOut,
     updateUserLastSeen,

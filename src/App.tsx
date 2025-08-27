@@ -49,7 +49,7 @@ interface Theme {
 }
 
 function App() {
-  const { loading, isGuest } = useAuth();
+  const { loading, isGuest, setGuestMode } = useAuth();
   const [boards, setBoards] = useState<Board[]>([]);
   const [activeBoardId, setActiveBoardId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -759,37 +759,36 @@ function App() {
     return (
       <div className="app welcome-screen">
         <div className="welcome-content">
-          <h1>Welcome to Eisenhower Matrix</h1>
+          <h1>Welcome to Matrix</h1>
           <p className="welcome-subtitle">
-            Organize your tasks by urgency and importance to boost your productivity
+            Organize tasks by urgency and importance.
           </p>
           
-          <div className="welcome-features">
-            <div className="feature">
-              <div className="feature-icon">⚡</div>
-              <h3>Urgent & Important</h3>
-              <p>Do these tasks now</p>
-            </div>
-            <div className="feature">
-              <div className="feature-icon">📅</div>
-              <h3>Not Urgent & Important</h3>
-              <p>Schedule these tasks</p>
-            </div>
-            <div className="feature">
-              <div className="feature-icon">👥</div>
-              <h3>Urgent & Not Important</h3>
-              <p>Delegate these tasks</p>
-            </div>
-            <div className="feature">
-              <div className="feature-icon">❌</div>
-              <h3>Not Urgent & Not Important</h3>
-              <p>Eliminate these tasks</p>
-            </div>
+          <div className="auth-options">
+            <button 
+              className="auth-option-btn primary"
+              onClick={() => {
+                setGuestMode(true);
+              }}
+            >
+              Continue as Guest
+            </button>
+            <button 
+              className="auth-option-btn secondary"
+              onClick={() => {
+                // This will trigger the sign-in modal
+                const signInBtn = document.querySelector('.auth-signin-btn') as HTMLButtonElement;
+                if (signInBtn) {
+                  signInBtn.click();
+                }
+              }}
+            >
+              Sign in with Email
+            </button>
           </div>
           
-          <div className="auth-section">
-            <h2>Get Started</h2>
-            <p>Sign in with your email to start organizing your tasks</p>
+          {/* Hidden auth button to trigger modal */}
+          <div style={{ display: 'none' }}>
             <AuthButton />
           </div>
         </div>
