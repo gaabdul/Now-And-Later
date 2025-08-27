@@ -38,8 +38,7 @@ interface SearchResult {
   isArchived: boolean;
 }
 
-type ArchiveSortType = 'date' | 'quadrant' | 'title';
-type ViewMode = 'grid' | 'list';
+
 type ThemeMode = 'light' | 'dark';
 type AccentColor = 'blue' | 'green' | 'purple';
 
@@ -56,28 +55,6 @@ function App() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTaskInputs, setNewTaskInputs] = useState<{ [key: string]: TaskFormData }>({});
   const [errorMessages, setErrorMessages] = useState<{ [key: string]: string }>({});
-  const [showArchive, setShowArchive] = useState(false);
-  const [dragState, setDragState] = useState<{
-    taskId: string | null;
-    sourceQuadrant: string | null;
-    isDragging: boolean;
-  }>({
-    taskId: null,
-    sourceQuadrant: null,
-    isDragging: false
-  });
-  const [keyboardMoveState, setKeyboardMoveState] = useState<{
-    taskId: string | null;
-    isOpen: boolean;
-  }>({
-    taskId: null,
-    isOpen: false
-  });
-  const [dragOverQuadrant, setDragOverQuadrant] = useState<string | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null);
-  const [deleteConfirmBoardId, setDeleteConfirmBoardId] = useState<string | null>(null);
-  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [showTaskForm, setShowTaskForm] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   
@@ -86,17 +63,8 @@ function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   
-  // Archive state
-  const [archiveSortType, setArchiveSortType] = useState<ArchiveSortType>('date');
-  const [archiveTagFilter, setArchiveTagFilter] = useState<string | null>(null);
-  
-  // Mobile state
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  
   // Theme state
   const [theme, setTheme] = useState<Theme>({ mode: 'light', accent: 'blue' });
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
   
   // Sign-in modal state
   const [showSignInModal, setShowSignInModal] = useState(false);
@@ -116,9 +84,6 @@ function App() {
     const savedBoards = localStorage.getItem('eisenhower-boards');
     const savedActiveBoard = localStorage.getItem('eisenhower-active-board');
     const savedTasks = localStorage.getItem('eisenhower-tasks');
-    const savedArchiveSort = localStorage.getItem('eisenhower-archive-sort');
-    const savedArchiveTagFilter = localStorage.getItem('eisenhower-archive-tag-filter');
-    const savedViewMode = localStorage.getItem('eisenhower-view-mode');
     const savedTheme = localStorage.getItem('eisenhower-theme');
     
     if (savedBoards) {
@@ -156,16 +121,6 @@ function App() {
       }
     }
 
-    if (savedArchiveSort) {
-      setArchiveSortType(savedArchiveSort as ArchiveSortType);
-    }
-    if (savedArchiveTagFilter) {
-      setArchiveTagFilter(savedArchiveTagFilter);
-    }
-    if (savedViewMode) {
-      setViewMode(savedViewMode as ViewMode);
-    }
-    
     if (savedTheme) {
       try {
         const parsedTheme = JSON.parse(savedTheme);
@@ -196,17 +151,14 @@ function App() {
     }
   }, [tasks]);
 
-  // Save archive preferences and theme
+  // Save theme
   useEffect(() => {
     try {
-      localStorage.setItem('eisenhower-archive-sort', archiveSortType);
-      localStorage.setItem('eisenhower-archive-tag-filter', archiveTagFilter || '');
-      localStorage.setItem('eisenhower-view-mode', viewMode);
       localStorage.setItem('eisenhower-theme', JSON.stringify(theme));
     } catch (error) {
-      console.warn('Failed to save preferences to localStorage:', error);
+      console.warn('Failed to save theme to localStorage:', error);
     }
-  }, [archiveSortType, archiveTagFilter, viewMode, theme]);
+  }, [theme]);
 
   // Request notification permission on mount
   useEffect(() => {
@@ -312,11 +264,7 @@ function App() {
       .sort((a, b) => a.order - b.order);
   };
 
-  const getCompletedTasks = () => {
-    return tasks
-      .filter(task => task.boardId === activeBoardId && task.completed)
-      .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
-  };
+
 
 
 
@@ -427,82 +375,6 @@ function App() {
     }
   };
 
-  const deleteTask = async (taskId: string) => {
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
-
-    try {
-      setTasks(prev => prev.filter((_, index) => index !== taskIndex));
-      setDeleteConfirmTaskId(null);
-    } catch (error) {
-      console.error('Error deleting task:', error);
-      alert('Failed to delete task. Please try again.');
-    }
-  };
-
-  const restoreTask = async (taskId: string) => {
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
-
-    try {
-      const updatedTask = {
-        ...tasks[taskIndex],
-        completed: false,
-        completedAt: undefined
-      };
-      setTasks(prev => prev.map((t, index) => (index === taskIndex ? updatedTask : t)));
-    } catch (error) {
-      console.error('Error restoring task:', error);
-      alert('Failed to restore task. Please try again.');
-    }
-  };
-
-  const deleteBoard = async (boardId: string) => {
-    try {
-      // Delete all tasks associated with this board
-      const updatedTasks = tasks.filter(task => task.boardId !== boardId);
-      setTasks(updatedTasks);
-      
-      // Remove the board
-      const updatedBoards = boards.filter(board => board.id !== boardId);
-      setBoards(updatedBoards);
-      
-      // If the deleted board was active, switch to the first available board
-      if (activeBoardId === boardId) {
-        if (updatedBoards.length > 0) {
-          setActiveBoardId(updatedBoards[0].id);
-        } else {
-          // Create a new default board if no boards remain
-          const defaultBoard: Board = { id: '1', name: 'My Matrix' };
-          setBoards([defaultBoard]);
-          setActiveBoardId(defaultBoard.id);
-        }
-      }
-      
-      setDeleteConfirmBoardId(null);
-    } catch (error) {
-      console.error('Error deleting board:', error);
-      alert('Failed to delete board. Please try again.');
-    }
-  };
-
-  // Helper functions
-  const getAllTags = () => {
-    const allTags = new Set<string>();
-    tasks.forEach(task => {
-      task.tags.forEach(tag => allTags.add(tag));
-    });
-    return Array.from(allTags).sort();
-  };
-
-  const getArchiveTags = () => {
-    const archiveTags = new Set<string>();
-    getCompletedTasks().forEach(task => {
-      task.tags.forEach(tag => archiveTags.add(tag));
-    });
-    return Array.from(archiveTags).sort();
-  };
-
   const formatDueDate = (dueDate: string | null) => {
     if (!dueDate) return '';
     const date = new Date(dueDate);
@@ -511,20 +383,6 @@ function App() {
 
   const getThemeClass = () => {
     return `theme-${theme.mode} accent-${theme.accent}`;
-  };
-
-  const toggleTheme = () => {
-    setTheme(prev => ({
-      ...prev,
-      mode: prev.mode === 'light' ? 'dark' : 'light'
-    }));
-  };
-
-  const setAccentColor = (accent: AccentColor) => {
-    setTheme(prev => ({
-      ...prev,
-      accent
-    }));
   };
 
   const handleSearchResultClick = (result: SearchResult) => {
@@ -547,150 +405,11 @@ function App() {
     return due < today && due.toDateString() !== today.toDateString();
   };
 
-  const getNextOrder = (quadrantId: string) => {
-    const quadrantTasks = getTasksForQuadrant(quadrantId);
-    return quadrantTasks.length;
-  };
-
-  // Drag and Drop Functions
-  const handleDragStart = (e: React.DragEvent, taskId: string, quadrantId: string) => {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', taskId);
-    setDragState({
-      taskId,
-      sourceQuadrant: quadrantId,
-      isDragging: true
-    });
-    
-    // Add dragging class to the dragged element
-    const target = e.target as HTMLElement;
-    const taskItem = target.closest('.task-item');
-    if (taskItem) {
-      taskItem.classList.add('dragging');
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent, quadrantId: string, index?: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverQuadrant(quadrantId);
-    setDragOverIndex(index !== undefined ? index : null);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverQuadrant(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragEnd = () => {
-    // Remove dragging class from all task items
-    document.querySelectorAll('.task-item').forEach(item => {
-      item.classList.remove('dragging');
-    });
-    
-    setDragState({ taskId: null, sourceQuadrant: null, isDragging: false });
-    setDragOverQuadrant(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetQuadrantId: string, targetIndex?: number) => {
-    e.preventDefault();
-    const taskId = e.dataTransfer.getData('text/plain');
-    
-    if (!taskId || !dragState.taskId) return;
-
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
-
-    const targetQuadrantTasks = getTasksForQuadrant(targetQuadrantId);
-    
-    let newOrder: number;
-    
-    if (targetIndex !== undefined) {
-      // Insert at specific position
-      if (targetIndex >= targetQuadrantTasks.length) {
-        newOrder = getNextOrder(targetQuadrantId);
-      } else {
-        const targetTask = targetQuadrantTasks[targetIndex];
-        newOrder = targetTask.order;
-      }
-    } else {
-      // Add to end
-      newOrder = getNextOrder(targetQuadrantId);
-    }
-
-    // Reorder tasks in target quadrant
-    const updatedTasks = tasks.map(t => {
-      if (t.id === taskId) {
-        return { ...t, quadrantId: targetQuadrantId, order: newOrder };
-      }
-      if (t.quadrantId === targetQuadrantId && !t.completed && t.boardId === activeBoardId) {
-        if (targetIndex !== undefined && t.order >= newOrder) {
-          return { ...t, order: t.order + 1 };
-        }
-      }
-      return t;
-    });
-
-    // Reorder tasks in source quadrant
-    // Update task orders for the source quadrant
-    updatedTasks.forEach(t => {
-      if (t.quadrantId === dragState.sourceQuadrant && !t.completed && t.boardId === activeBoardId) {
-        const sourceTasks = updatedTasks.filter(task => 
-          task.quadrantId === dragState.sourceQuadrant && 
-          !task.completed && 
-          task.boardId === activeBoardId &&
-          task.id !== taskId
-        ).sort((a, b) => a.order - b.order);
-        
-        const sourceIndex = sourceTasks.findIndex(task => task.id === t.id);
-        if (sourceIndex !== -1) {
-          // Update task order using the context
-          // This part needs to be handled by the backend or a state management solution
-          // For now, we'll just re-fetch or update the specific task order
-          console.warn("Reordering tasks directly in localStorage is not fully supported. Consider backend.");
-          // setTasks(prev => prev.map(task => task.id === t.id ? { ...task, order: sourceIndex } : task));
-        }
-      }
-    });
-    setDragState({ taskId: null, sourceQuadrant: null, isDragging: false });
-    setDragOverQuadrant(null);
-    setDragOverIndex(null);
-  };
-
-  // Keyboard Move Functions
-  const handleKeyboardMove = (taskId: string, _targetQuadrantId: string, direction?: 'up' | 'down') => {
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
-
-    if (direction) {
-      // Move up/down within same quadrant
-      const quadrantTasks = getTasksForQuadrant(tasks[taskIndex].quadrantId);
-      const currentIndex = quadrantTasks.findIndex(t => t.id === taskId);
-      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-      
-      if (targetIndex >= 0 && targetIndex < quadrantTasks.length) {
-        // This part needs to be handled by the backend or a state management solution
-        // For now, we'll just re-fetch or update the specific task order
-        console.warn("Reordering tasks directly in localStorage is not fully supported. Consider backend.");
-      }
-          } else {
-        // Move to different quadrant
-        // This part needs to be handled by the backend or a state management solution
-        // For now, we'll just re-fetch or update the specific task quadrant and order
-        console.warn("Moving tasks directly in localStorage is not fully supported. Consider backend.");
-      }
-    
-    setKeyboardMoveState({ taskId: null, isOpen: false });
-  };
-
   const cancelEdit = () => {
     setEditingTaskId(null);
     setErrorMessages({});
     setShowTaskForm(null);
   };
-
-
 
   // Global keyboard event handler for A key
   useEffect(() => {
@@ -705,7 +424,7 @@ function App() {
         event.preventDefault();
         
         // Find the first quadrant and open add task form
-        if (!showArchive && !showTaskForm) {
+        if (!showTaskForm) {
           setShowTaskForm('Q1');
           setNewTaskInputs(prev => ({ 
             ...prev, 
@@ -717,32 +436,7 @@ function App() {
 
     document.addEventListener('keydown', handleGlobalKeyDown);
     return () => document.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [showArchive, showTaskForm]);
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const getQuadrantName = (quadrantId: string) => {
-    const quadrant = quadrants.find(q => q.id === quadrantId);
-    return quadrant ? quadrant.name : quadrantId;
-  };
-
-  const activeBoard = boards.find(board => board.id === activeBoardId);
-  const completedTasks = getCompletedTasks();
-  const allTags = getAllTags();
-  const archiveTags = getArchiveTags();
-
-  // Group completed tasks by date
-  const groupedCompletedTasks = completedTasks.reduce((groups, task) => {
-    const date = new Date(task.completedAt || 0).toLocaleDateString();
-    if (!groups[date]) {
-      groups[date] = [];
-    }
-    groups[date].push(task);
-    return groups;
-  }, {} as { [key: string]: Task[] });
+  }, [showTaskForm]);
 
   // Show login flow for first-time users
   if (loading) {
@@ -802,8 +496,8 @@ function App() {
       <header className="header">
         <h1>Eisenhower Matrix</h1>
         
-        {/* Desktop Header Controls */}
-        <div className="header-controls desktop-only">
+        {/* Simple Header Controls */}
+        <div className="header-controls">
           <div className="search-container">
             <input
               ref={searchInputRef}
@@ -827,717 +521,246 @@ function App() {
                       <span className="search-result-location">
                         {result.isArchived ? 'Archive' : result.quadrantName}
                       </span>
-                      {result.task.dueDate && (
-                        <span className="search-result-due">
-                          📅 {formatDueDate(result.task.dueDate)}
-                        </span>
-                      )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          
-          {allTags.length > 0 && (
-            <div className="tag-filter">
-              <select 
-                value={activeTagFilter || ''} 
-                onChange={(e) => setActiveTagFilter(e.target.value || null)}
-                className="tag-filter-select"
-              >
-                <option value="">All Tags</option>
-                {allTags.map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          <button 
-            className={`archive-btn ${showArchive ? 'active' : ''}`}
-            onClick={() => setShowArchive(!showArchive)}
-          >
-            {showArchive ? (
-              <>
-                <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-                Back to Matrix
-              </>
-            ) : (
-              <>
-                <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2-2z"/>
-                  <polyline points="3,7 8,12 13,7"/>
-                </svg>
-                Archive
-              </>
-            )}
-          </button>
-          
-          <div className="theme-controls">
-            <button 
-              className="theme-toggle-btn"
-              onClick={() => setShowThemeMenu(!showThemeMenu)}
-              title="Theme Settings"
-            >
-              {theme.mode === 'light' ? (
-                <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="5"/>
-                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                </svg>
-              ) : (
-                <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-              )}
-            </button>
-            
-            {showThemeMenu && (
-              <div className="theme-menu">
-                <div className="theme-mode">
-                  <label>Theme:</label>
-                  <button 
-                    className={`theme-mode-btn ${theme.mode === 'light' ? 'active' : ''}`}
-                    onClick={() => toggleTheme()}
-                  >
-                    ☀️ Light
-                  </button>
-                  <button 
-                    className={`theme-mode-btn ${theme.mode === 'dark' ? 'active' : ''}`}
-                    onClick={() => toggleTheme()}
-                  >
-                    🌙 Dark
-                  </button>
-                </div>
-                <div className="theme-accent">
-                  <label>Accent:</label>
-                  <button 
-                    className={`accent-btn ${theme.accent === 'blue' ? 'active' : ''}`}
-                    onClick={() => setAccentColor('blue')}
-                  >
-                    Blue
-                  </button>
-                  <button 
-                    className={`accent-btn ${theme.accent === 'green' ? 'active' : ''}`}
-                    onClick={() => setAccentColor('green')}
-                  >
-                    Green
-                  </button>
-                  <button 
-                    className={`accent-btn ${theme.accent === 'purple' ? 'active' : ''}`}
-                    onClick={() => setAccentColor('purple')}
-                  >
-                    Purple
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* User Profile Section */}
+          {/* User Profile */}
           <div className="user-profile">
             <AuthButton />
           </div>
         </div>
-
-        {/* Mobile Header Controls */}
-        <div className="header-controls mobile-only">
-          <button 
-            className="mobile-menu-btn"
-            onClick={() => setShowMobileMenu(!showMobileMenu)}
-          >
-            <svg className="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
-          </button>
-          
-          {showMobileMenu && (
-            <div className="mobile-menu">
-              <div className="mobile-search">
-                <input
-                  type="text"
-                  placeholder="Search tasks..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="mobile-search-input"
-                />
-              </div>
-              
-              {allTags.length > 0 && (
-                <div className="mobile-tag-filter">
-                  <select 
-                    value={activeTagFilter || ''} 
-                    onChange={(e) => setActiveTagFilter(e.target.value || null)}
-                    className="mobile-tag-filter-select"
-                  >
-                    <option value="">All Tags</option>
-                    {allTags.map(tag => (
-                      <option key={tag} value={tag}>{tag}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              
-              <button 
-                className={`mobile-archive-btn ${showArchive ? 'active' : ''}`}
-                onClick={() => {
-                  setShowArchive(!showArchive);
-                  setShowMobileMenu(false);
-                }}
-              >
-                {showArchive ? '← Back to Matrix' : '📁 Archive'}
-              </button>
-              
-              <button 
-                className="mobile-view-toggle"
-                onClick={() => {
-                  setViewMode(viewMode === 'grid' ? 'list' : 'grid');
-                  setShowMobileMenu(false);
-                }}
-              >
-                {viewMode === 'grid' ? (
-                  <>
-                    <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="8" y1="6" x2="21" y2="6"/>
-                      <line x1="8" y1="12" x2="21" y2="12"/>
-                      <line x1="8" y1="18" x2="21" y2="18"/>
-                      <line x1="3" y1="6" x2="3.01" y2="6"/>
-                      <line x1="3" y1="12" x2="3.01" y2="12"/>
-                      <line x1="3" y1="18" x2="3.01" y2="18"/>
-                    </svg>
-                    List
-                  </>
-                ) : (
-                  <>
-                    <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="7" height="7"/>
-                      <rect x="14" y="3" width="7" height="7"/>
-                      <rect x="14" y="14" width="7" height="7"/>
-                      <rect x="3" y="14" width="7" height="7"/>
-                    </svg>
-                    Grid
-                  </>
-                )}
-              </button>
-
-              {/* Mobile User Profile */}
-              <div className="mobile-user-profile">
-                <AuthButton />
-              </div>
-            </div>
-          )}
-        </div>
       </header>
       
-      {!showArchive && (
-        <>
-          <div className="board-switcher">
-            <div className="board-list">
-              {boards.map(board => (
-                <div key={board.id} className="board-chip-container">
-                  <button
-                    className={`board-chip ${board.id === activeBoardId ? 'active' : ''}`}
-                    onClick={() => setActiveBoardId(board.id)}
-                  >
-                    {board.name}
-                  </button>
-                  {boards.length > 1 && (
-                    <button
-                      className="board-delete-btn"
-                      onClick={() => setDeleteConfirmBoardId(board.id)}
-                      title="Delete board"
-                    >
-                      <svg className="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3,6 5,6 21,6"/>
-                        <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                        <line x1="10" y1="11" x2="10" y2="17"/>
-                        <line x1="14" y1="11" x2="14" y2="17"/>
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button className="new-board-btn" onClick={createNewBoard}>
-              + New Board
+      <div className="board-switcher">
+        <div className="board-list">
+          {boards.map(board => (
+            <button
+              key={board.id}
+              className={`board-chip ${board.id === activeBoardId ? 'active' : ''}`}
+              onClick={() => setActiveBoardId(board.id)}
+            >
+              {board.name}
             </button>
-          </div>
+          ))}
+        </div>
+        <button className="new-board-btn" onClick={createNewBoard}>
+          + New Board
+        </button>
+      </div>
 
-          {/* Board Delete Confirmation */}
-          {deleteConfirmBoardId && (
-            <div className="delete-board-modal">
-              <div className="delete-board-content">
-                <h3>Delete Board</h3>
-                <p>
-                  Are you sure you want to delete "{boards.find(b => b.id === deleteConfirmBoardId)?.name}"? 
-                  This will permanently delete all tasks in this board.
-                </p>
-                <div className="delete-board-actions">
-                  <button 
-                    className="confirm-delete-btn"
-                    onClick={() => deleteBoard(deleteConfirmBoardId)}
-                  >
-                    Delete Board
-                  </button>
-                  <button 
-                    className="cancel-delete-btn"
-                    onClick={() => setDeleteConfirmBoardId(null)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <main className={`matrix-container ${viewMode === 'list' ? 'list-mode' : ''}`}>
-            <div className={`matrix ${viewMode === 'list' ? 'list-layout' : 'grid-layout'}`}>
-              {quadrants.map(quadrant => {
-                const quadrantTasks = getTasksForQuadrant(quadrant.id);
-                const isAddingTask = showTaskForm === quadrant.id;
-                const isDragOver = dragOverQuadrant === quadrant.id;
+      <main className="matrix-container">
+        <div className="matrix">
+          {quadrants.map(quadrant => {
+            const quadrantTasks = getTasksForQuadrant(quadrant.id);
+            const isAddingTask = showTaskForm === quadrant.id;
+            
+            return (
+              <div 
+                key={quadrant.id} 
+                className={`quadrant ${quadrant.id.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                <h2>{quadrant.name}</h2>
+                <p>{quadrant.action}</p>
                 
-                return (
-                  <div 
-                    key={quadrant.id} 
-                    className={`quadrant ${quadrant.id.toLowerCase().replace(/\s+/g, '-')} ${isDragOver ? 'drag-over' : ''}`}
-                    onDragOver={(e) => handleDragOver(e, quadrant.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, quadrant.id)}
-                  >
-                    <h2>{quadrant.name}</h2>
-                    <p>{quadrant.action}</p>
-                    
-                    <div className="task-list">
-                      {quadrantTasks.map((task, index) => (
-                        <div 
-                          key={task.id} 
-                          className="task-item" 
-                          data-task-id={task.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, task.id, quadrant.id)}
-                          onDragEnd={handleDragEnd}
-                          title="Drag to move or reorder"
+                <div className="task-list">
+                  {quadrantTasks.map((task) => (
+                    <div 
+                      key={task.id} 
+                      className="task-item" 
+                      data-task-id={task.id}
+                    >
+                      <div className="task-content">
+                        <button 
+                          className="complete-btn"
+                          onClick={() => completeTask(task.id)}
+                          title="Mark as complete"
                         >
-                          <div className="task-content">
-                            <button 
-                              className="complete-btn"
-                              onClick={() => completeTask(task.id)}
-                              title="Mark as complete"
-                            >
-                              <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polyline points="20,6 9,17 4,12"/>
-                              </svg>
-                            </button>
-                            {editingTaskId === task.id ? (
-                              <div className="task-edit">
-                                <input
-                                  type="text"
-                                  value={newTaskInputs[task.id]?.title || task.title}
-                                  onChange={(e) => setNewTaskInputs(prev => ({ 
-                                    ...prev, 
-                                    [task.id]: { 
-                                      ...prev[task.id], 
-                                      title: e.target.value 
-                                    } 
-                                  }))}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      updateTask(task.id, newTaskInputs[task.id] || { title: task.title, dueDate: '', reminderAt: '', tags: '' });
-                                    } else if (e.key === 'Escape') {
-                                      e.preventDefault();
-                                      cancelEdit();
-                                    }
-                                  }}
-                                  onBlur={() => updateTask(task.id, newTaskInputs[task.id] || { title: task.title, dueDate: '', reminderAt: '', tags: '' })}
-                                  autoFocus
-                                  className="task-input"
-                                />
-                                {errorMessages[task.id] && (
-                                  <div className="error-message">{errorMessages[task.id]}</div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="task-info">
-                                <div 
-                                  className="task-title"
-                                  onClick={() => {
-                                    setEditingTaskId(task.id);
-                                    setNewTaskInputs(prev => ({ 
-                                      ...prev, 
-                                      [task.id]: { 
-                                        title: task.title, 
-                                        dueDate: task.dueDate || '', 
-                                        reminderAt: task.reminderAt || '', 
-                                        tags: task.tags.join(', '),
-                                        recurrence: task.recurrence || 'none'
-                                      } 
-                                    }));
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      setKeyboardMoveState({ taskId: task.id, isOpen: true });
-                                    }
-                                  }}
-                                  tabIndex={0}
-                                  role="button"
-                                  aria-label={`Edit task: ${task.title}`}
-                                >
-                                  {task.title}
-                                </div>
-                                <div className="task-meta">
-                                  {task.dueDate && (
-                                    <div className={`task-due-date ${isOverdue(task.dueDate) ? 'overdue' : ''}`}>
-                                      {isOverdue(task.dueDate) && (
-                                        <svg className="icon warning-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                                          <line x1="12" y1="9" x2="12" y2="13"/>
-                                          <line x1="12" y1="17" x2="12.01" y2="17"/>
-                                        </svg>
-                                      )}
-                                      <svg className="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                                        <line x1="16" y1="2" x2="16" y2="6"/>
-                                        <line x1="8" y1="2" x2="8" y2="6"/>
-                                        <line x1="3" y1="10" x2="21" y2="10"/>
-                                      </svg>
-                                      {formatDueDate(task.dueDate)}
-                                    </div>
-                                  )}
-                                  {task.recurrence !== 'none' && (
-                                    <div className="task-recurrence" title={`Repeats ${task.recurrence}`}>
-                                      <svg className="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <polyline points="23,4 23,10 17,10"/>
-                                        <polyline points="1,20 1,14 7,14"/>
-                                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-                                      </svg>
-                                    </div>
-                                  )}
-                                </div>
-                                {task.tags.length > 0 && (
-                                  <div className="task-tags">
-                                    {task.tags.map(tag => (
-                                      <span 
-                                        key={tag} 
-                                        className="task-tag"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setActiveTagFilter(tag);
-                                        }}
-                                      >
-                                        #{tag}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <button 
-                              className="delete-btn-small"
-                              onClick={() => setDeleteConfirmTaskId(task.id)}
-                              title="Delete task permanently"
-                            >
-                              <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polyline points="3,6 5,6 21,6"/>
-                                <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                                <line x1="10" y1="11" x2="10" y2="17"/>
-                                <line x1="14" y1="11" x2="14" y2="17"/>
-                              </svg>
-                            </button>
-                          </div>
-                          
-                          {/* Delete Confirmation */}
-                          {deleteConfirmTaskId === task.id && (
-                            <div className="delete-confirmation">
-                              <p>Delete "{task.title}" permanently?</p>
-                              <div className="delete-actions">
-                                <button 
-                                  className="confirm-delete-btn"
-                                  onClick={() => deleteTask(task.id)}
-                                >
-                                  Delete
-                                </button>
-                                <button 
-                                  className="cancel-delete-btn"
-                                  onClick={() => setDeleteConfirmTaskId(null)}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Keyboard Move Menu */}
-                          {keyboardMoveState.taskId === task.id && keyboardMoveState.isOpen && (
-                            <div className="keyboard-move-menu">
-                              <div className="move-section">
-                                <h4>Move to:</h4>
-                                {quadrants.map(q => (
-                                  <button
-                                    key={q.id}
-                                    onClick={() => handleKeyboardMove(task.id, q.id)}
-                                    className={q.id === quadrant.id ? 'current' : ''}
-                                  >
-                                    {q.name}
-                                  </button>
-                                ))}
-                              </div>
-                              <div className="move-section">
-                                <h4>Reorder:</h4>
-                                <button onClick={() => handleKeyboardMove(task.id, quadrant.id, 'up')}>
-                                  ↑ Move Up
-                                </button>
-                                <button onClick={() => handleKeyboardMove(task.id, quadrant.id, 'down')}>
-                                  ↓ Move Down
-                                </button>
-                              </div>
-                              <button 
-                                className="close-menu"
-                                onClick={() => setKeyboardMoveState({ taskId: null, isOpen: false })}
-                              >
-                                ✕ Close
-                              </button>
-                            </div>
-                          )}
-                          
-                          {/* Drop indicator */}
-                          {isDragOver && dragOverIndex === index && (
-                            <div className="drop-indicator" />
-                          )}
-                        </div>
-                      ))}
-                      
-                      {/* Drop indicator at end */}
-                      {isDragOver && dragOverIndex === quadrantTasks.length && (
-                        <div className="drop-indicator" />
-                      )}
-                      
-                      {isAddingTask ? (
-                        <div className="task-form">
-                          <input
-                            type="text"
-                            value={newTaskInputs[quadrant.id]?.title || ''}
-                            onChange={(e) => setNewTaskInputs(prev => ({ 
-                              ...prev, 
-                              [quadrant.id]: { 
-                                ...prev[quadrant.id], 
-                                title: e.target.value 
-                              } 
-                            }))}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addTask(quadrant.id);
-                              } else if (e.key === 'Escape') {
-                                e.preventDefault();
-                                setShowTaskForm(null);
-                                const { [quadrant.id]: removed, ...rest } = newTaskInputs;
-                                setNewTaskInputs(rest);
-                              }
-                            }}
-                            placeholder="Task title..."
-                            className="task-input"
-                            autoFocus
-                          />
-                          <div className="task-form-row">
-                            <input
-                              type="date"
-                              value={newTaskInputs[quadrant.id]?.dueDate || ''}
-                              onChange={(e) => setNewTaskInputs(prev => ({ 
-                                ...prev, 
-                                [quadrant.id]: { 
-                                  ...prev[quadrant.id], 
-                                  dueDate: e.target.value 
-                                } 
-                              }))}
-                              className="task-date-input"
-                              title="Due date"
-                            />
-                          </div>
-                          <div className="task-form-row">
+                          <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="20,6 9,17 4,12"/>
+                          </svg>
+                        </button>
+                        {editingTaskId === task.id ? (
+                          <div className="task-edit">
                             <input
                               type="text"
-                              value={newTaskInputs[quadrant.id]?.tags || ''}
+                              value={newTaskInputs[task.id]?.title || task.title}
                               onChange={(e) => setNewTaskInputs(prev => ({ 
                                 ...prev, 
-                                [quadrant.id]: { 
-                                  ...prev[quadrant.id], 
-                                  tags: e.target.value 
+                                [task.id]: { 
+                                  ...prev[task.id], 
+                                  title: e.target.value 
                                 } 
                               }))}
-                              placeholder="Tags (comma-separated)..."
-                              className="task-tags-input"
-                            />
-                          </div>
-                          <div className="task-form-actions">
-                            <button 
-                              className="save-task-btn"
-                              onClick={() => addTask(quadrant.id)}
-                            >
-                              Save
-                            </button>
-                            <button 
-                              className="cancel-task-btn"
-                              onClick={() => {
-                                setShowTaskForm(null);
-                                const { [quadrant.id]: removed, ...rest } = newTaskInputs;
-                                setNewTaskInputs(rest);
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  updateTask(task.id, newTaskInputs[task.id] || { title: task.title, dueDate: '', reminderAt: '', tags: '' });
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  cancelEdit();
+                                }
                               }}
-                            >
-                              Cancel
-                            </button>
+                              onBlur={() => updateTask(task.id, newTaskInputs[task.id] || { title: task.title, dueDate: '', reminderAt: '', tags: '' })}
+                              autoFocus
+                              className="task-input"
+                            />
+                            {errorMessages[task.id] && (
+                              <div className="error-message">{errorMessages[task.id]}</div>
+                            )}
                           </div>
-                          {errorMessages[quadrant.id] && (
-                            <div className="error-message">{errorMessages[quadrant.id]}</div>
-                          )}
-                        </div>
-                      ) : (
-                        <button 
-                          className="add-task-btn"
-                          onClick={() => {
-                            setShowTaskForm(quadrant.id);
-                            setNewTaskInputs(prev => ({ 
-                              ...prev, 
-                              [quadrant.id]: { title: '', dueDate: '', tags: '', recurrence: 'none' } 
-                            }));
-                          }}
-                        >
-                          + Add Task
-                        </button>
-                      )}
-                    </div>
-                    
-                    {quadrantTasks.length === 0 && !isAddingTask && (
-                      <div className="empty-state">
-                        <p>No tasks yet</p>
-                        <p>Click "Add Task" to get started</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </main>
-        </>
-      )}
-
-      {showArchive && (
-        <main className="archive-container">
-          <div className="archive-header">
-            <h2>Archive - {activeBoard?.name}</h2>
-            <p>{completedTasks.length} completed task{completedTasks.length !== 1 ? 's' : ''}</p>
-            
-            <div className="archive-controls">
-              <div className="archive-sort">
-                <label htmlFor="archive-sort">Sort by:</label>
-                <select
-                  id="archive-sort"
-                  value={archiveSortType}
-                  onChange={(e) => setArchiveSortType(e.target.value as ArchiveSortType)}
-                  className="archive-sort-select"
-                >
-                  <option value="date">Date Completed</option>
-                  <option value="quadrant">Original Quadrant</option>
-                  <option value="title">Task Title</option>
-                </select>
-              </div>
-              
-              {archiveTags.length > 0 && (
-                <div className="archive-tag-filter">
-                  <label htmlFor="archive-tag-filter">Filter by tag:</label>
-                  <select
-                    id="archive-tag-filter"
-                    value={archiveTagFilter || ''}
-                    onChange={(e) => setArchiveTagFilter(e.target.value || null)}
-                    className="archive-tag-filter-select"
-                  >
-                    <option value="">All Tags</option>
-                    {archiveTags.map(tag => (
-                      <option key={tag} value={tag}>{tag}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {completedTasks.length === 0 ? (
-            <div className="archive-empty">
-              <p>No completed tasks yet</p>
-              <p>Complete some tasks to see them here</p>
-            </div>
-          ) : (
-            <div className="archive-list">
-              {Object.entries(groupedCompletedTasks).map(([date, tasks]) => (
-                <div key={date} className="archive-group">
-                  <h3 className="archive-date">{date}</h3>
-                  {tasks.map(task => (
-                    <div key={task.id} className="archive-item">
-                      <div className="archive-task-info">
-                        <div className="archive-task-title">{task.title}</div>
-                        <div className="archive-task-meta">
-                          <span className="archive-quadrant">{getQuadrantName(task.quadrantId)}</span>
-                          <span className="archive-time">{formatDate(task.completedAt || 0)}</span>
-                        </div>
-                        {task.tags.length > 0 && (
-                          <div className="archive-task-tags">
-                            {task.tags.map(tag => (
-                              <span key={tag} className="archive-task-tag">#{tag}</span>
-                            ))}
+                        ) : (
+                          <div className="task-info">
+                            <div 
+                              className="task-title"
+                              onClick={() => {
+                                setEditingTaskId(task.id);
+                                setNewTaskInputs(prev => ({ 
+                                  ...prev, 
+                                  [task.id]: { 
+                                    title: task.title, 
+                                    dueDate: task.dueDate || '', 
+                                    reminderAt: task.reminderAt || '', 
+                                    tags: task.tags.join(', '),
+                                    recurrence: task.recurrence || 'none'
+                                  } 
+                                }));
+                              }}
+                              tabIndex={0}
+                              role="button"
+                              aria-label={`Edit task: ${task.title}`}
+                            >
+                              {task.title}
+                            </div>
+                            <div className="task-meta">
+                              {task.dueDate && (
+                                <div className={`task-due-date ${isOverdue(task.dueDate) ? 'overdue' : ''}`}>
+                                  {isOverdue(task.dueDate) && (
+                                    <svg className="icon warning-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                      <line x1="12" y1="9" x2="12" y2="13"/>
+                                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                    </svg>
+                                  )}
+                                  <svg className="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                    <line x1="16" y1="2" x2="16" y2="6"/>
+                                    <line x1="8" y1="2" x2="8" y2="6"/>
+                                    <line x1="3" y1="10" x2="21" y2="10"/>
+                                  </svg>
+                                  {formatDueDate(task.dueDate)}
+                                </div>
+                              )}
+                              {task.recurrence !== 'none' && (
+                                <div className="task-recurrence" title={`Repeats ${task.recurrence}`}>
+                                  <svg className="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="23,4 23,10 17,10"/>
+                                    <polyline points="1,20 1,14 7,14"/>
+                                    <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                            {task.tags.length > 0 && (
+                              <div className="task-tags">
+                                {task.tags.map(tag => (
+                                  <span 
+                                    key={tag} 
+                                    className="task-tag"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                    }}
+                                  >
+                                    #{tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                      <div className="archive-actions">
-                        <button 
-                          className="restore-btn"
-                          onClick={() => restoreTask(task.id)}
-                          title="Restore to original quadrant"
-                        >
-                          ↶ Restore
-                        </button>
-                        <button 
-                          className="delete-btn"
-                          onClick={() => setDeleteConfirmTaskId(task.id)}
-                          title="Delete permanently"
-                        >
-                          🗑️ Delete
-                        </button>
-                      </div>
-                      
-                      {/* Delete Confirmation for Archive */}
-                      {deleteConfirmTaskId === task.id && (
-                        <div className="delete-confirmation archive-delete">
-                          <p>Delete "{task.title}" permanently from archive?</p>
-                          <div className="delete-actions">
-                            <button 
-                              className="confirm-delete-btn"
-                              onClick={() => deleteTask(task.id)}
-                            >
-                              Delete
-                            </button>
-                            <button 
-                              className="cancel-delete-btn"
-                              onClick={() => setDeleteConfirmTaskId(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ))}
+                  
+                  {isAddingTask ? (
+                    <div className="task-form">
+                      <input
+                        type="text"
+                        value={newTaskInputs[quadrant.id]?.title || ''}
+                        onChange={(e) => setNewTaskInputs(prev => ({ 
+                          ...prev, 
+                          [quadrant.id]: { 
+                            ...prev[quadrant.id], 
+                            title: e.target.value 
+                          } 
+                        }))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addTask(quadrant.id);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setShowTaskForm(null);
+                            const { [quadrant.id]: removed, ...rest } = newTaskInputs;
+                            setNewTaskInputs(rest);
+                          }
+                        }}
+                        placeholder="Task title..."
+                        className="task-input"
+                        autoFocus
+                      />
+                      <div className="task-form-actions">
+                        <button 
+                          className="save-task-btn"
+                          onClick={() => addTask(quadrant.id)}
+                        >
+                          Save
+                        </button>
+                        <button 
+                          className="cancel-task-btn"
+                          onClick={() => {
+                            setShowTaskForm(null);
+                            const { [quadrant.id]: removed, ...rest } = newTaskInputs;
+                            setNewTaskInputs(rest);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {errorMessages[quadrant.id] && (
+                        <div className="error-message">{errorMessages[quadrant.id]}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <button 
+                      className="add-task-btn"
+                      onClick={() => {
+                        setShowTaskForm(quadrant.id);
+                        setNewTaskInputs(prev => ({ 
+                          ...prev, 
+                          [quadrant.id]: { title: '', dueDate: '', tags: '', recurrence: 'none' } 
+                        }));
+                      }}
+                    >
+                      + Add Task
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </main>
-      )}
+                
+                {quadrantTasks.length === 0 && !isAddingTask && (
+                  <div className="empty-state">
+                    <p>No tasks yet</p>
+                    <p>Click "Add Task" to get started</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </main>
       
 
       
