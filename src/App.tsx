@@ -56,12 +56,17 @@ function App() {
   const [newTaskInputs, setNewTaskInputs] = useState<{ [key: string]: TaskFormData }>({});
   const [errorMessages, setErrorMessages] = useState<{ [key: string]: string }>({});
   const [showTaskForm, setShowTaskForm] = useState<string | null>(null);
+  const [deleteConfirmBoardId, setDeleteConfirmBoardId] = useState<string | null>(null);
+  const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  
+  // Archive state
+  const [showArchive, setShowArchive] = useState(false);
   
   // Theme state
   const [theme, setTheme] = useState<Theme>({ mode: 'light', accent: 'blue' });
@@ -405,6 +410,71 @@ function App() {
     return due < today && due.toDateString() !== today.toDateString();
   };
 
+  const deleteBoard = async (boardId: string) => {
+    try {
+      // Delete all tasks associated with this board
+      const updatedTasks = tasks.filter(task => task.boardId !== boardId);
+      setTasks(updatedTasks);
+      
+      // Remove the board
+      const updatedBoards = boards.filter(board => board.id !== boardId);
+      setBoards(updatedBoards);
+      
+      // If the deleted board was active, switch to the first available board
+      if (activeBoardId === boardId) {
+        if (updatedBoards.length > 0) {
+          setActiveBoardId(updatedBoards[0].id);
+        } else {
+          // Create a new default board if no boards remain
+          const defaultBoard: Board = { id: '1', name: 'My Matrix' };
+          setBoards([defaultBoard]);
+          setActiveBoardId(defaultBoard.id);
+        }
+      }
+      
+      setDeleteConfirmBoardId(null);
+    } catch (error) {
+      console.error('Error deleting board:', error);
+      alert('Failed to delete board. Please try again.');
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    try {
+      setTasks(prev => prev.filter((_, index) => index !== taskIndex));
+      setDeleteConfirmTaskId(null);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert('Failed to delete task. Please try again.');
+    }
+  };
+
+  const getCompletedTasks = () => {
+    return tasks
+      .filter(task => task.boardId === activeBoardId && task.completed)
+      .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+  };
+
+  const restoreTask = async (taskId: string) => {
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    try {
+      const updatedTask = {
+        ...tasks[taskIndex],
+        completed: false,
+        completedAt: undefined
+      };
+      setTasks(prev => prev.map((t, index) => (index === taskIndex ? updatedTask : t)));
+    } catch (error) {
+      console.error('Error restoring task:', error);
+      alert('Failed to restore task. Please try again.');
+    }
+  };
+
   const cancelEdit = () => {
     setEditingTaskId(null);
     setErrorMessages({});
@@ -528,6 +598,14 @@ function App() {
             )}
           </div>
 
+          {/* Archive Toggle */}
+          <button 
+            className={`archive-btn ${showArchive ? 'active' : ''}`}
+            onClick={() => setShowArchive(!showArchive)}
+          >
+            {showArchive ? '← Back to Matrix' : '📁 Archive'}
+          </button>
+
           {/* User Profile */}
           <div className="user-profile">
             <AuthButton />
@@ -538,13 +616,23 @@ function App() {
       <div className="board-switcher">
         <div className="board-list">
           {boards.map(board => (
-            <button
-              key={board.id}
-              className={`board-chip ${board.id === activeBoardId ? 'active' : ''}`}
-              onClick={() => setActiveBoardId(board.id)}
-            >
-              {board.name}
-            </button>
+            <div key={board.id} className={`board-chip-container ${board.id === activeBoardId ? 'active' : ''}`}>
+              <button
+                className={`board-chip ${board.id === activeBoardId ? 'active' : ''}`}
+                onClick={() => setActiveBoardId(board.id)}
+              >
+                {board.name}
+              </button>
+              {boards.length > 1 && (
+                <button
+                  className="board-delete-btn"
+                  onClick={() => setDeleteConfirmBoardId(board.id)}
+                  title="Delete board"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           ))}
         </div>
         <button className="new-board-btn" onClick={createNewBoard}>
@@ -552,9 +640,37 @@ function App() {
         </button>
       </div>
 
-      <main className="matrix-container">
-        <div className="matrix">
-          {quadrants.map(quadrant => {
+      {/* Board Delete Confirmation */}
+      {deleteConfirmBoardId && (
+        <div className="delete-modal">
+          <div className="delete-modal-content">
+            <h3>Delete Board</h3>
+            <p>
+              Are you sure you want to delete "{boards.find(b => b.id === deleteConfirmBoardId)?.name}"? 
+              This will permanently delete all tasks in this board.
+            </p>
+            <div className="delete-modal-actions">
+              <button 
+                className="btn-danger"
+                onClick={() => deleteBoard(deleteConfirmBoardId)}
+              >
+                Delete Board
+              </button>
+              <button 
+                className="btn-secondary"
+                onClick={() => setDeleteConfirmBoardId(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!showArchive && (
+        <main className="matrix-container">
+          <div className="matrix">
+            {quadrants.map(quadrant => {
             const quadrantTasks = getTasksForQuadrant(quadrant.id);
             const isAddingTask = showTaskForm === quadrant.id;
             
@@ -679,10 +795,38 @@ function App() {
                                 ))}
                               </div>
                             )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                                                     </div>
+                         )}
+                         <button 
+                           className="task-delete-btn"
+                           onClick={() => setDeleteConfirmTaskId(task.id)}
+                           title="Delete task"
+                         >
+                           ×
+                         </button>
+                       </div>
+                       
+                       {/* Task Delete Confirmation */}
+                       {deleteConfirmTaskId === task.id && (
+                         <div className="task-delete-confirmation">
+                           <p>Delete "{task.title}"?</p>
+                           <div className="task-delete-actions">
+                             <button 
+                               className="btn-danger-small"
+                               onClick={() => deleteTask(task.id)}
+                             >
+                               Delete
+                             </button>
+                             <button 
+                               className="btn-secondary-small"
+                               onClick={() => setDeleteConfirmTaskId(null)}
+                             >
+                               Cancel
+                             </button>
+                           </div>
+                         </div>
+                       )}
+                     </div>
                   ))}
                   
                   {isAddingTask ? (
@@ -712,6 +856,39 @@ function App() {
                         className="task-input"
                         autoFocus
                       />
+                      
+                      <div className="task-form-row">
+                        <input
+                          type="date"
+                          value={newTaskInputs[quadrant.id]?.dueDate || ''}
+                          onChange={(e) => setNewTaskInputs(prev => ({ 
+                            ...prev, 
+                            [quadrant.id]: { 
+                              ...prev[quadrant.id], 
+                              dueDate: e.target.value 
+                            } 
+                          }))}
+                          className="task-date-input"
+                          placeholder="Due date"
+                        />
+                      </div>
+                      
+                      <div className="task-form-row">
+                        <input
+                          type="text"
+                          value={newTaskInputs[quadrant.id]?.tags || ''}
+                          onChange={(e) => setNewTaskInputs(prev => ({ 
+                            ...prev, 
+                            [quadrant.id]: { 
+                              ...prev[quadrant.id], 
+                              tags: e.target.value 
+                            } 
+                          }))}
+                          placeholder="Tags (comma-separated)..."
+                          className="task-tags-input"
+                        />
+                      </div>
+                      
                       <div className="task-form-actions">
                         <button 
                           className="save-task-btn"
@@ -758,19 +935,91 @@ function App() {
                 )}
               </div>
             );
-          })}
-        </div>
-      </main>
-      
+            })}
+          </div>
+        </main>
+      )}
 
-      
-      {/* Merge Prompt Modal */}
-      {/* This component is no longer used as per the new_code, but keeping it for now */}
-      {/* <MergePromptModal
-        isOpen={showMergePrompt}
-        onMerge={mergeLocalData}
-        onSkip={skipMerge}
-      /> */}
+      {/* Archive View */}
+      {showArchive && (
+        <main className="archive-container">
+          <div className="archive-header">
+            <h2>Completed Tasks</h2>
+            <p>{getCompletedTasks().length} completed task{getCompletedTasks().length !== 1 ? 's' : ''}</p>
+          </div>
+          
+          {getCompletedTasks().length === 0 ? (
+            <div className="archive-empty">
+              <p>No completed tasks yet</p>
+              <p>Complete some tasks to see them here</p>
+            </div>
+          ) : (
+            <div className="archive-list">
+              {getCompletedTasks().map(task => (
+                <div key={task.id} className="archive-item">
+                  <div className="archive-task-info">
+                    <div className="archive-task-title">{task.title}</div>
+                    <div className="archive-task-meta">
+                      <span className="archive-time">
+                        {task.completedAt && new Date(task.completedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {task.tags.length > 0 && (
+                      <div className="archive-task-tags">
+                        {task.tags.map(tag => (
+                          <span key={tag} className="archive-task-tag">#{tag}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="archive-actions">
+                    <button 
+                      className="btn-secondary-small"
+                      onClick={() => restoreTask(task.id)}
+                      title="Restore task"
+                    >
+                      ↶ Restore
+                    </button>
+                    <button 
+                      className="btn-danger-small"
+                      onClick={() => setDeleteConfirmTaskId(task.id)}
+                      title="Delete permanently"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  
+                  {/* Delete Confirmation for Archive */}
+                  {deleteConfirmTaskId === task.id && (
+                    <div className="task-delete-confirmation">
+                      <p>Delete "{task.title}" permanently?</p>
+                      <div className="task-delete-actions">
+                        <button 
+                          className="btn-danger-small"
+                          onClick={() => deleteTask(task.id)}
+                        >
+                          Delete
+                        </button>
+                        <button 
+                          className="btn-secondary-small"
+                          onClick={() => setDeleteConfirmTaskId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
+      )}
+
+      {/* Sign-in modal */}
+      {showSignInModal && (
+        <SignInModal isOpen={showSignInModal} onClose={() => setShowSignInModal(false)} />
+      )}
     </div>
   )
 }
