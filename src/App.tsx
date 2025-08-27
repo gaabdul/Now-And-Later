@@ -49,7 +49,7 @@ interface Theme {
 }
 
 function App() {
-  const { user, loading, isGuest } = useAuth();
+  const { loading, isGuest } = useAuth();
   const [boards, setBoards] = useState<Board[]>([]);
   const [activeBoardId, setActiveBoardId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
